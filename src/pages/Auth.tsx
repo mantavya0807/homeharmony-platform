@@ -14,7 +14,7 @@ export default function Auth() {
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
-  const [role, setRole] = useState<"buyer" | "seller">("buyer");
+  const [role, setRole] = useState<"buyer" | "seller">("seller");
   
   // Form states
   const [email, setEmail] = useState("");
