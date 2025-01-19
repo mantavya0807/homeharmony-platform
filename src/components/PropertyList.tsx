@@ -3,15 +3,20 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 
-export function PropertyList() {
+export function PropertyList({ location }: { location: string }) {
   const { data: properties, isLoading } = useQuery({
-    queryKey: ["properties"],
+    queryKey: ["properties", location], // Include location in queryKey to refetch on change
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("properties")
-        .select("*")
-        .order("created_at", { ascending: false });
-      
+      let query = supabase.from("properties").select("*").order("created_at", { ascending: false });
+
+      if (location) {
+        // Add filtering based on location
+        query = query.or(
+          `city.ilike.%${location}%,state.ilike.%${location}%,zip_code.ilike.%${location}%`
+        );
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
@@ -25,9 +30,13 @@ export function PropertyList() {
     );
   }
 
+  if (!properties?.length) {
+    return <p className="text-center text-gray-500">No properties found for "{location}".</p>;
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-      {properties?.map((property) => (
+      {properties.map((property) => (
         <PropertyCard
           key={property.id}
           title={property.title}
