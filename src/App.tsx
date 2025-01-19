@@ -7,6 +7,7 @@ import { ThemeProvider } from "next-themes";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import SellerDashboard from "./pages/SellerDashboard";
 import { Navigation } from "./components/Navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "./integrations/supabase/client";
@@ -15,14 +16,47 @@ const queryClient = new QueryClient();
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setIsAuthenticated(!!session);
+      
+      if (session) {
+        // Fetch user role from profiles table
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+        
+        setUserRole(profile?.role || null);
+      } else {
+        setUserRole(null);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Helper function to handle route protection
+  const ProtectedRoute = ({ 
+    element, 
+    requiredRole = null 
+  }: { 
+    element: JSX.Element, 
+    requiredRole?: string | null 
+  }) => {
+    if (!isAuthenticated) {
+      return <Navigate to="/auth" />;
+    }
+
+    if (requiredRole && userRole !== requiredRole) {
+      return <Navigate to={userRole === 'seller' ? '/seller-dashboard' : '/dashboard'} />;
+    }
+
+    return element;
+  };
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -38,13 +72,29 @@ const App = () => {
                 <Route
                   path="/auth"
                   element={
-                    isAuthenticated ? <Navigate to="/dashboard" /> : <Auth />
+                    isAuthenticated ? (
+                      <Navigate to={userRole === 'seller' ? '/seller-dashboard' : '/dashboard'} />
+                    ) : (
+                      <Auth />
+                    )
                   }
                 />
                 <Route
                   path="/dashboard"
                   element={
-                    isAuthenticated ? <Dashboard /> : <Navigate to="/auth" />
+                    <ProtectedRoute 
+                      element={<Dashboard />} 
+                      requiredRole="buyer"
+                    />
+                  }
+                />
+                <Route
+                  path="/seller-dashboard"
+                  element={
+                    <ProtectedRoute 
+                      element={<SellerDashboard />}
+                      requiredRole="seller"
+                    />
                   }
                 />
               </Routes>
