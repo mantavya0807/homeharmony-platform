@@ -19,6 +19,7 @@ export default function Auth() {
 
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const [view, setView] = useState<ViewType>(initialView);
   const [role, setRole] = useState<"buyer" | "seller">("buyer");
   
