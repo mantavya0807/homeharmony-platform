@@ -30,13 +30,14 @@ export function PropertyList() {
       {properties?.map((property) => (
         <PropertyCard
           key={property.id}
+          id={property.id}
           title={property.title}
           price={property.price}
           location={`${property.city}, ${property.state}`}
           beds={property.bedrooms}
           baths={property.bathrooms}
           sqft={property.square_feet}
-          imageUrl={property.images[0] || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"}
+          imageUrl={property.images?.[0] || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"}
         />
       ))}
     </div>

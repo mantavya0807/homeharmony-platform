@@ -11,6 +11,7 @@ import SellerDashboard from "./pages/SellerDashboard";
 import { Navigation } from "./components/Navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "./integrations/supabase/client";
+import PropertyDetails from "./components/PropertyDetails";
 
 const queryClient = new QueryClient();
 
@@ -80,6 +81,17 @@ const App = () => {
                       <Navigate to="/dashboard" />
                     ) : (
                       <SellerDashboard />
+                    )
+                  }
+                />
+                {/* New Property Details Route */}
+                <Route
+                  path="/properties/:id"
+                  element={
+                    !isAuthenticated ? (
+                      <Navigate to="/auth" />
+                    ) : (
+                      <PropertyDetails />
                     )
                   }
                 />
