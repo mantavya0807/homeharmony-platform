@@ -12,6 +12,7 @@ import { ChatInterface } from "./components/ChatInterface";
 import { Navigation } from "./components/Navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "./integrations/supabase/client";
+import PropertyDetails from "./components/PropertyDetails";
 
 const queryClient = new QueryClient();
 
@@ -24,7 +25,6 @@ const App = () => {
       setIsAuthenticated(!!session);
       
       if (session) {
-        // Fetch user role from profiles table
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
@@ -40,33 +40,14 @@ const App = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Helper function to handle route protection
-  const ProtectedRoute = ({ 
-    element, 
-    requiredRole = null 
-  }: { 
-    element: JSX.Element, 
-    requiredRole?: string | null 
-  }) => {
-    if (!isAuthenticated) {
-      return <Navigate to="/auth" />;
-    }
-
-    if (requiredRole && userRole !== requiredRole) {
-      return <Navigate to={userRole === 'seller' ? '/seller-dashboard' : '/dashboard'} />;
-    }
-
-    return element;
-  };
-
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="system" enableSystem>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
         <TooltipProvider>
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <div className="min-h-screen bg-background">
+            <div className="min-h-screen bg-background text-foreground">
               <Navigation />
               <Routes>
                 <Route path="/" element={<Index />} />
@@ -83,10 +64,13 @@ const App = () => {
                 <Route
                   path="/dashboard"
                   element={
-                    <ProtectedRoute 
-                      element={<Dashboard />} 
-                      requiredRole="buyer"
-                    />
+                    !isAuthenticated ? (
+                      <Navigate to="/auth" />
+                    ) : userRole === "seller" ? (
+                      <Navigate to="/seller-dashboard" />
+                    ) : (
+                      <Dashboard />
+                    )
                   }
                 />
                 <Route
@@ -100,10 +84,24 @@ const App = () => {
                 <Route
                   path="/seller-dashboard"
                   element={
-                    <ProtectedRoute 
-                      element={<SellerDashboard />}
-                      requiredRole="seller"
-                    />
+                    !isAuthenticated ? (
+                      <Navigate to="/auth" />
+                    ) : userRole !== "seller" ? (
+                      <Navigate to="/dashboard" />
+                    ) : (
+                      <SellerDashboard />
+                    )
+                  }
+                />
+                {/* New Property Details Route */}
+                <Route
+                  path="/properties/:id"
+                  element={
+                    !isAuthenticated ? (
+                      <Navigate to="/auth" />
+                    ) : (
+                      <PropertyDetails />
+                    )
                   }
                 />
               </Routes>

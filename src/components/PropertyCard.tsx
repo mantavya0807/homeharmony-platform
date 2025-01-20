@@ -1,8 +1,10 @@
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Bed, Bath, Square } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface PropertyCardProps {
+  id: string;
   title: string;
   price: number;
   location: string;
@@ -13,6 +15,7 @@ interface PropertyCardProps {
 }
 
 export function PropertyCard({
+  id,
   title,
   price,
   location,
@@ -21,8 +24,13 @@ export function PropertyCard({
   sqft,
   imageUrl,
 }: PropertyCardProps) {
+  const navigate = useNavigate();
+
   return (
-    <Card className="overflow-hidden transition-all duration-300 hover:shadow-lg animate-fadeIn">
+    <Card 
+      className="overflow-hidden transition-all duration-300 hover:shadow-lg animate-fadeIn cursor-pointer"
+      onClick={() => navigate(`/properties/${id}`)}
+    >
       <CardHeader className="p-0">
         <div className="relative h-48 overflow-hidden">
           <img
@@ -58,4 +66,4 @@ export function PropertyCard({
       </CardFooter>
     </Card>
   );
-}
+} 
