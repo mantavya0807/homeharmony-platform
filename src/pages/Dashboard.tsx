@@ -6,6 +6,7 @@ import { PropertyList } from "@/components/PropertyList";
 export default function Dashboard() {
   const navigate = useNavigate();
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [location, setLocation] = useState<string>(""); // State for location input
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -32,7 +33,21 @@ export default function Dashboard() {
       <h1 className="text-3xl font-bold mb-8">
         {userRole === "seller" ? "My Listings" : "Available Properties"}
       </h1>
-      <PropertyList />
+      <form
+        onSubmit={(e) => {
+          e.preventDefault(); // Prevent form submission
+        }}
+        className="mb-4"
+      >
+        <input
+          type="text"
+          placeholder="Enter location (city, state, or ZIP)"
+          value={location}
+          onChange={(e) => setLocation(e.target.value)} // Update location state
+          className="border px-4 py-2 rounded w-full"
+        />
+      </form>
+      <PropertyList location={location} /> {/* Pass location as prop */}
     </div>
   );
 }
