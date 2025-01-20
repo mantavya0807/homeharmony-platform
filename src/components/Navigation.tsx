@@ -4,6 +4,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { MessageSquare } from "lucide-react";
 
 export function Navigation() {
   const [session, setSession] = useState(null);
@@ -40,10 +41,17 @@ export function Navigation() {
               <Button variant="ghost" asChild>
                 <Link to="/dashboard">Dashboard</Link>
               </Button>
+              <Button variant="ghost" asChild>
+  <Link to="/chat">
+    <MessageSquare className="h-4 w-4 mr-2" />
+    Messages
+  </Link>
+</Button>
               <Button onClick={handleSignOut}>Sign Out</Button>
             </>
           ) : (
             <>
+
               <Button variant="ghost" asChild>
                 <Link to="/auth">Sign In</Link>
               </Button>

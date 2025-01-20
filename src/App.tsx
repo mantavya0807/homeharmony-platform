@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import SellerDashboard from "./pages/SellerDashboard";
+import { ChatInterface } from "./components/ChatInterface";
 import { Navigation } from "./components/Navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "./integrations/supabase/client";
@@ -88,6 +89,14 @@ const App = () => {
                     />
                   }
                 />
+                <Route
+                  path="/chat"
+                  element={
+                    <ProtectedRoute 
+                      element={<ChatInterface />} 
+                    />
+                  }
+                  />
                 <Route
                   path="/seller-dashboard"
                   element={
