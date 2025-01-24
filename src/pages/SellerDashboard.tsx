@@ -1,4 +1,5 @@
 // SellerDashboard.tsx
+
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,24 +26,31 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue,  // Add this import with other UI component imports
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+// Rest of your imports stay the same
 
 type Property = Database["public"]["Tables"]["properties"]["Row"];
 type HousingComplex = Database["public"]["Tables"]["housing_complexes"]["Row"];
 
+// Update PropertyForm interface
 interface PropertyForm {
   title: string;
+  description: string; // Added
   price: string;
+  property_type: 'house' | 'apartment' | 'condo' | 'townhouse';
+  bedrooms: string;
+  bathrooms: string;
+  square_feet: string;
   address: string;
   city: string;
   state: string;
   zip_code: string;
-  bedrooms: string;
-  bathrooms: string;
-  square_feet: string;
-  property_type: 'house' | 'apartment' | 'condo' | 'townhouse';
   housing_complex_id?: string;
+  google_maps_link?: string;
 }
 
 interface MediaFile {
@@ -63,8 +71,10 @@ export default function SellerDashboard() {
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [isEditDialogOpen, setEditDialogOpen] = useState(false);
 
+  // Initialize state with all fields
   const [newProperty, setNewProperty] = useState<PropertyForm>({
     title: "",
+    description: "", // Added
     price: "",
     address: "",
     city: "",
@@ -75,6 +85,7 @@ export default function SellerDashboard() {
     square_feet: "",
     property_type: "house",
     housing_complex_id: "",
+    google_maps_link: "",
   });
 
   const [housingComplexes, setHousingComplexes] = useState<HousingComplex[]>([]);
@@ -257,14 +268,23 @@ export default function SellerDashboard() {
     }
   };
 
+  // Update handleSubmit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
     setUploading(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) throw new Error("Not authenticated");
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
 
       // Create property
       const { data, error } = await supabase
@@ -272,6 +292,7 @@ export default function SellerDashboard() {
         .insert([
           {
             title: newProperty.title,
+            description: newProperty.description, // Added
             price: parseFloat(newProperty.price),
             address: newProperty.address,
             city: newProperty.city,
@@ -284,6 +305,7 @@ export default function SellerDashboard() {
             housing_complex_id: newProperty.housing_complex_id,
             seller_id: session.user.id,
             images: [], // Initialize with empty array
+            google_maps_link: newProperty.google_maps_link || null, // Add the new field
           },
         ])
         .select()
@@ -324,6 +346,7 @@ export default function SellerDashboard() {
     }
   };
 
+  // Update form validation
   const validateForm = (): boolean => {
     if (mediaFiles.length === 0) {
       toast({
@@ -336,6 +359,7 @@ export default function SellerDashboard() {
 
     const requiredFields = [
       { key: "title", label: "Title" },
+      { key: "description", label: "Description" },
       { key: "price", label: "Price" },
       { key: "address", label: "Address" },
       { key: "city", label: "City" },
@@ -360,12 +384,27 @@ export default function SellerDashboard() {
       }
     }
 
+    // Optional: Validate Google Maps URL if provided
+
+
+    // Validate ZIP code format
+    const zipCodePattern = /^\d{5}$/;
+    if (!zipCodePattern.test(newProperty.zip_code)) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid 5-digit ZIP code",
+        variant: "destructive",
+      });
+      return false;
+    }
+
     return true;
   };
 
   const resetForm = () => {
     setNewProperty({
       title: "",
+      description: "", // Reset the field
       price: "",
       address: "",
       city: "",
@@ -376,6 +415,7 @@ export default function SellerDashboard() {
       square_feet: "",
       property_type: "house",
       housing_complex_id: "",
+      google_maps_link: "", // Reset the field
     });
     setMediaFiles([]);
   };
@@ -404,199 +444,286 @@ export default function SellerDashboard() {
               Add New Property
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[800px] h-auto overflow-y-auto">
+          <DialogContent className="max-h-[80vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>Add New Property</DialogTitle>
               <DialogDescription>
                 Enter the details of your property listing.
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-6 mt-4">
-              {/* Media Upload Section */}
-              <div className="space-y-4">
-                <Label>Property Media</Label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {mediaFiles.map((file, index) => (
-                    <div key={index} className="relative group">
-                      {file.type === 'image' ? (
-                        <img
-                          src={file.preview}
-                          alt={`Preview ${index}`}
-                          className="h-24 w-full object-cover rounded-lg border"
-                        />
-                      ) : (
-                        <video
-                          src={file.preview}
-                          className="h-24 w-full object-cover rounded-lg border"
-                          controls
-                        />
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => removeMedia(index)}
-                        className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                  <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg border-muted-foreground/25 hover:border-muted-foreground/50 cursor-pointer transition-colors">
-                    <div className="flex flex-col items-center justify-center">
-                      <Upload className="h-6 w-6 mb-2 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">Upload</span>
-                    </div>
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept="image/*,video/*"
-                      multiple
-                      onChange={handleMediaChange}
-                    />
-                  </label>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Upload images or videos (max 10MB each)
-                </p>
-              </div>
-
-              {/* Basic Information */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Title</Label>
-                  <Input
-                    id="title"
-                    value={newProperty.title}
-                    onChange={(e) =>
-                      setNewProperty({ ...newProperty, title: e.target.value })
-                    }
-                    required
-                  />
+            <ScrollArea className="flex-1">
+              <form onSubmit={handleSubmit} className="space-y-6 pr-4">
+                {/* Media Upload Section */}
+                <div className="space-y-4">
+                  <Label>Property Media</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {mediaFiles.map((file, index) => (
+                      <div key={index} className="relative group">
+                        {file.type === 'image' ? (
+                          <img
+                            src={file.preview}
+                            alt={`Preview ${index}`}
+                            className="h-24 w-full object-cover rounded-lg border"
+                          />
+                        ) : (
+                          <video
+                            src={file.preview}
+                            className="h-24 w-full object-cover rounded-lg border"
+                            controls
+                          />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeMedia(index)}
+                          className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg border-muted-foreground/25 hover:border-muted-foreground/50 cursor-pointer transition-colors">
+                      <div className="flex flex-col items-center justify-center">
+                        <Upload className="h-6 w-6 mb-2 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Upload</span>
+                      </div>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*,video/*"
+                        multiple
+                        onChange={handleMediaChange}
+                      />
+                    </label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Upload images or videos (max 10MB each)
+                  </p>
                 </div>
 
-                {/* Housing Complex Section */}
-                <div className="space-y-2">
-                  <Label htmlFor="housing_complex">Housing Complex</Label>
-                  <Select
-                    value={newProperty.housing_complex_id || ""}
-                    onValueChange={(value) => {
-                      if (value === "new") {
-                        setAddComplexOpen(true);
-                        setNewProperty({ ...newProperty, housing_complex_id: "" });
-                      } else {
-                        setNewProperty({ ...newProperty, housing_complex_id: value });
+                {/* Basic Information */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="title">Title</Label>
+                    <Input
+                      id="title"
+                      value={newProperty.title}
+                      onChange={(e) =>
+                        setNewProperty({ ...newProperty, title: e.target.value })
                       }
-                    }}
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select complex" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {housingComplexes.map((complex) => (
-                        <SelectItem key={complex.id} value={complex.id}>
-                          {complex.name}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="new">+ Add New Complex</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                      required
+                    />
+                  </div>
 
-              {/* Property Details */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="price">Price</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    value={newProperty.price}
-                    onChange={(e) =>
-                      setNewProperty({ ...newProperty, price: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="property_type">Property Type</Label>
-                  <Select
-                    value={newProperty.property_type}
-                    onValueChange={(value: Database["public"]["Enums"]["property_type"]) =>
-                      setNewProperty({ ...newProperty, property_type: value })
-                    }
-                    required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="house">House</SelectItem>
-                      <SelectItem value="apartment">Apartment</SelectItem>
-                      <SelectItem value="condo">Condo</SelectItem>
-                      <SelectItem value="townhouse">Townhouse</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                  {/* Add description field to the form */}
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={newProperty.description}
+                      onChange={(e) =>
+                        setNewProperty({ ...newProperty, description: e.target.value })
+                      }
+                      placeholder="Describe your property..."
+                      required
+                    />
+                  </div>
 
-              {/* Address Information */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Input
-                    id="address"
-                    value={newProperty.address}
-                    onChange={(e) =>
-                      setNewProperty({ ...newProperty, address: e.target.value })
-                    }
-                    required
-                  />
+                  {/* Housing Complex Section */}
+                  <div className="space-y-2">
+                    <Label htmlFor="housing_complex">Housing Complex</Label>
+                    <Select
+                      value={newProperty.housing_complex_id || ""}
+                      onValueChange={(value) => {
+                        if (value === "new") {
+                          setAddComplexOpen(true);
+                          setNewProperty({ ...newProperty, housing_complex_id: "" });
+                        } else {
+                          setNewProperty({ ...newProperty, housing_complex_id: value });
+                        }
+                      }}
+                      required
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select complex" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {housingComplexes.map((complex) => (
+                          <SelectItem key={complex.id} value={complex.id}>
+                            {complex.name}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="new">+ Add New Complex</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
+
+                {/* Google Maps Link */}
+                <div className="space-y-2">
+                  <Label htmlFor="google_maps_link">Google Maps Link</Label>
+                  <Input
+                    id="google_maps_link"
+                    type="url"
+                    placeholder="https://maps.google.com/..."
+                    value={newProperty.google_maps_link}
+                    onChange={(e) =>
+                      setNewProperty({ ...newProperty, google_maps_link: e.target.value })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Provide a Google Maps URL for the property's location (optional).
+                  </p>
+                </div>
+
+                {/* Property Details */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
+                    <Label htmlFor="price">Price</Label>
                     <Input
-                      id="city"
-                      value={newProperty.city}
+                      id="price"
+                      type="number"
+                      value={newProperty.price}
                       onChange={(e) =>
-                        setNewProperty({ ...newProperty, city: e.target.value })
+                        setNewProperty({ ...newProperty, price: e.target.value })
                       }
                       required
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="state">State</Label>
+                    <Label htmlFor="property_type">Property Type</Label>
+                    <Select
+                      value={newProperty.property_type}
+                      onValueChange={(value: Database["public"]["Enums"]["property_type"]) =>
+                        setNewProperty({ ...newProperty, property_type: value })
+                      }
+                      required
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="house">House</SelectItem>
+                        <SelectItem value="apartment">Apartment</SelectItem>
+                        <SelectItem value="condo">Condo</SelectItem>
+                        <SelectItem value="townhouse">Townhouse</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="bedrooms">Bedrooms</Label>
                     <Input
-                      id="state"
-                      value={newProperty.state}
+                      id="bedrooms"
+                      type="number"
+                      min="1"
+                      value={newProperty.bedrooms}
                       onChange={(e) =>
-                        setNewProperty({ ...newProperty, state: e.target.value })
+                        setNewProperty({ ...newProperty, bedrooms: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bathrooms">Bathrooms</Label>
+                    <Input
+                      id="bathrooms"
+                      type="number"
+                      min="1"
+                      step="0.5"
+                      value={newProperty.bathrooms}
+                      onChange={(e) =>
+                        setNewProperty({ ...newProperty, bathrooms: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="square_feet">Square Feet</Label>
+                    <Input
+                      id="square_feet"
+                      type="number"
+                      min="1"
+                      value={newProperty.square_feet}
+                      onChange={(e) =>
+                        setNewProperty({ ...newProperty, square_feet: e.target.value })
                       }
                       required
                     />
                   </div>
                 </div>
-              </div>
 
-              {/* Property Features */}
-              {/* Removed Amenities from Property Form as per requirement */}
+                {/* Address Information */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="address">Address</Label>
+                    <Input
+                      id="address"
+                      value={newProperty.address}
+                      onChange={(e) =>
+                        setNewProperty({ ...newProperty, address: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="city">City</Label>
+                      <Input
+                        id="city"
+                        value={newProperty.city}
+                        onChange={(e) =>
+                          setNewProperty({ ...newProperty, city: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="state">State</Label>
+                      <Input
+                        id="state"
+                        value={newProperty.state}
+                        onChange={(e) =>
+                          setNewProperty({ ...newProperty, state: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="zip_code">ZIP Code</Label>
+                    <Input
+                      id="zip_code"
+                      value={newProperty.zip_code}
+                      onChange={(e) =>
+                        setNewProperty({ ...newProperty, zip_code: e.target.value })
+                      }
+                      pattern="[0-9]{5}"
+                      maxLength={5}
+                      placeholder="12345"
+                      required
+                    />
+                  </div>
+                </div>
 
-              {/* Submit Button */}
-              <Button 
-                type="submit" 
-                className="w-full" 
-                disabled={uploading}
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating Listing...
-                  </>
-                ) : (
-                  "Create Listing"
-                )}
-              </Button>
-            </form>
+                {/* Submit Button */}
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  disabled={uploading}
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating Listing...
+                    </>
+                  ) : (
+                    "Create Listing"
+                  )}
+                </Button>
+              </form>
+            </ScrollArea>
           </DialogContent>
         </Dialog>
       </div>

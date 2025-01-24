@@ -1,3 +1,5 @@
+// PropertyDetails.tsx
+
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,6 +45,7 @@ interface Property {
     id: string;
     full_name: string;
   };
+  google_maps_link?: string; // New field
 }
 
 export default function PropertyDetails() {
@@ -105,10 +108,12 @@ export default function PropertyDetails() {
       }
 
       // Check if chat already exists
-      const { data: existingChats } = await supabase
+      const { data: existingChats, error: chatError } = await supabase
         .from('chats')
         .select('*, chat_participants(*)')
         .eq('type', 'individual');
+
+      if (chatError) throw chatError;
 
       const existingChat = existingChats?.find(chat =>
         chat.chat_participants.some(p => p.user_id === property.seller_id) &&
@@ -121,7 +126,7 @@ export default function PropertyDetails() {
         chatId = existingChat.id;
       } else {
         // Create new chat
-        const { data: chat, error: chatError } = await supabase
+        const { data: chat, error: chatCreateError } = await supabase
           .from('chats')
           .insert({
             type: 'individual',
@@ -129,7 +134,7 @@ export default function PropertyDetails() {
           .select()
           .single();
 
-        if (chatError) throw chatError;
+        if (chatCreateError) throw chatCreateError;
 
         // Add participants
         const { error: participantsError } = await supabase
@@ -157,7 +162,7 @@ export default function PropertyDetails() {
 
       // Navigate to chat
       navigate('/chat', { state: { chatId } });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error contacting agent:', error);
       toast({
         title: "Error",
@@ -269,6 +274,43 @@ export default function PropertyDetails() {
                 <p className="whitespace-pre-wrap">{property.description}</p>
               </CardContent>
             </Card>
+
+            {/* Google Maps Section */}
+            {property.google_maps_link && (
+              // Replace the Location Card section with this:
+
+<Card>
+  <CardHeader>
+    <CardTitle>Location</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <div className="aspect-video relative rounded-lg overflow-hidden">
+      <iframe
+        className="w-full h-[300px] border-0"
+        loading="lazy"
+        referrerPolicy="no-referrer-when-downgrade"
+        src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I
+          &q=${encodeURIComponent(`${property.address}, ${property.city}, ${property.state} ${property.zip_code}`)}
+          &zoom=15`}
+        allowFullScreen
+      ></iframe>
+    </div>
+    <div className="mt-4">
+      <a 
+        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          `${property.address}, ${property.city}, ${property.state} ${property.zip_code}`
+        )}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <MapPin className="h-4 w-4" />
+        <span>Open in Google Maps</span>
+      </a>
+    </div>
+  </CardContent>
+</Card>
+            )}
           </div>
 
           {/* Sidebar */}
