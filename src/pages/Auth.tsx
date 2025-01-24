@@ -19,7 +19,6 @@ export default function Auth() {
 
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
   const [view, setView] = useState<ViewType>(initialView);
   const [role, setRole] = useState<"buyer" | "seller">("buyer");
   
@@ -28,6 +27,30 @@ export default function Auth() {
   const [confirmEmail, setConfirmEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+
+  useEffect(() => {
+    // Check if user is already logged in
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // Get user role
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single();
+        
+        // Redirect based on role
+        if (profile?.role === "seller") {
+          navigate("/seller-dashboard");
+        } else {
+          navigate("/dashboard");
+        }
+      }
+    };
+    
+    checkAuth();
+  }, [navigate]);
 
   useEffect(() => {
     // Update view when initialView changes
@@ -42,7 +65,10 @@ export default function Auth() {
     setError("");
 
     try {
-      const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({
+      // Clear any existing session first
+      await supabase.auth.signOut();
+
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -52,11 +78,12 @@ export default function Auth() {
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role")
-        .eq("id", user.id)
+        .eq("id", data.user.id)
         .single();
 
       if (profileError) throw profileError;
 
+      // Navigate based on role
       if (profile.role === "seller") {
         navigate("/seller-dashboard");
       } else {
@@ -75,13 +102,21 @@ export default function Auth() {
     setError("");
 
     try {
+      // Validation
       if (!fullName.trim()) {
         throw new Error("Full name is required");
       }
       if (email !== confirmEmail) {
         throw new Error("Emails do not match");
       }
+      if (password.length < 6) {
+        throw new Error("Password must be at least 6 characters");
+      }
 
+      // Clear any existing session first
+      await supabase.auth.signOut();
+
+      // Create new user
       const { data: { user }, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -94,7 +129,9 @@ export default function Auth() {
       });
 
       if (signUpError) throw signUpError;
+      if (!user) throw new Error("Failed to create user");
 
+      // Create profile
       const { error: profileError } = await supabase
         .from("profiles")
         .insert([
@@ -104,11 +141,19 @@ export default function Auth() {
             role: role,
             email: email
           }
-        ]);
+        ])
+        .select()
+        .single();
 
       if (profileError) throw profileError;
 
       setError("Success! Please check your email to confirm your account.");
+      
+      // Clear form
+      setEmail("");
+      setConfirmEmail("");
+      setPassword("");
+      setFullName("");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -245,6 +290,7 @@ export default function Auth() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  minLength={6}
                 />
               </div>
               <div className="text-sm text-muted-foreground">
@@ -281,7 +327,10 @@ export default function Auth() {
     <div className="container max-w-md mx-auto mt-12 p-4">
       <h1 className="text-2xl font-bold mb-6 text-center">Welcome to HomeHarmony</h1>
       {error && (
-        <Alert variant={error.includes("check your email") ? "default" : "destructive"} className="mb-4">
+        <Alert 
+          variant={error.includes("check your email") ? "default" : "destructive"} 
+          className="mb-4"
+        >
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}

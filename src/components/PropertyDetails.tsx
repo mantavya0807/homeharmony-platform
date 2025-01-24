@@ -21,6 +21,7 @@ import {
   ArrowLeft,
   Loader2,
 } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 
 interface Property {
   id: string;
@@ -37,21 +38,34 @@ interface Property {
   zip_code: string;
   images: string[];
   created_at: string;
+  seller_id: string;
+  seller: {
+    id: string;
+    full_name: string;
+  };
 }
 
 export default function PropertyDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [contactLoading, setContactLoading] = useState(false);
 
   useEffect(() => {
     const fetchProperty = async () => {
       try {
         const { data, error } = await supabase
           .from("properties")
-          .select("*")
+          .select(`
+            *,
+            seller:seller_id (
+              id,
+              full_name
+            )
+          `)
           .eq("id", id)
           .single();
 
@@ -67,6 +81,93 @@ export default function PropertyDetails() {
 
     fetchProperty();
   }, [id]);
+
+  const handleContactAgent = async () => {
+    try {
+      setContactLoading(true);
+
+      // Check if user is authenticated
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+
+      if (!user) {
+        toast({
+          title: "Authentication required",
+          description: "Please sign in to contact the agent",
+          variant: "destructive",
+        });
+        navigate("/auth");
+        return;
+      }
+
+      if (!property?.seller_id) {
+        throw new Error("Seller information not found");
+      }
+
+      // Check if chat already exists
+      const { data: existingChats } = await supabase
+        .from('chats')
+        .select('*, chat_participants(*)')
+        .eq('type', 'individual');
+
+      const existingChat = existingChats?.find(chat =>
+        chat.chat_participants.some(p => p.user_id === property.seller_id) &&
+        chat.chat_participants.some(p => p.user_id === user.id)
+      );
+
+      let chatId;
+
+      if (existingChat) {
+        chatId = existingChat.id;
+      } else {
+        // Create new chat
+        const { data: chat, error: chatError } = await supabase
+          .from('chats')
+          .insert({
+            type: 'individual',
+          })
+          .select()
+          .single();
+
+        if (chatError) throw chatError;
+
+        // Add participants
+        const { error: participantsError } = await supabase
+          .from('chat_participants')
+          .insert([
+            { chat_id: chat.id, user_id: user.id },
+            { chat_id: chat.id, user_id: property.seller_id },
+          ]);
+
+        if (participantsError) throw participantsError;
+
+        // Send initial message
+        const { error: messageError } = await supabase
+          .from('messages')
+          .insert({
+            chat_id: chat.id,
+            sender_id: user.id,
+            content: `Hi, I'm interested in your property: ${property.title} at ${property.address}, ${property.city}`,
+          });
+
+        if (messageError) throw messageError;
+
+        chatId = chat.id;
+      }
+
+      // Navigate to chat
+      navigate('/chat', { state: { chatId } });
+    } catch (error) {
+      console.error('Error contacting agent:', error);
+      toast({
+        title: "Error",
+        description: "Failed to initiate chat with the agent. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setContactLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -183,9 +284,27 @@ export default function PropertyDetails() {
             </Card>
 
             <Card>
-              <CardContent className="pt-6">
-                <Button className="w-full" size="lg">
-                  Contact Agent
+              <CardHeader>
+                <CardTitle>Agent Details</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Listed by: {property.seller?.full_name || "Unknown Agent"}
+                </p>
+                <Button 
+                  className="w-full" 
+                  size="lg"
+                  onClick={handleContactAgent}
+                  disabled={contactLoading}
+                >
+                  {contactLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    "Contact Agent"
+                  )}
                 </Button>
               </CardContent>
             </Card>

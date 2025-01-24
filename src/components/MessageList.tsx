@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Check, CheckCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -28,6 +28,21 @@ export function MessageList({ chatId }) {
           .order('created_at', { ascending: true });
 
         if (error) throw error;
+
+        // Mark unread messages as read
+        const unreadMessages = messagesData.filter(
+          msg => !msg.read && msg.sender_id !== user.id
+        );
+
+        if (unreadMessages.length > 0) {
+          const { error: updateError } = await supabase
+            .from('messages')
+            .update({ read: true })
+            .in('id', unreadMessages.map(msg => msg.id));
+
+          if (updateError) console.error('Error marking messages as read:', updateError);
+        }
+
         setMessages(messagesData);
       } catch (error) {
         console.error('Error fetching messages:', error);
@@ -37,44 +52,55 @@ export function MessageList({ chatId }) {
     };
 
     fetchMessages();
+  }, [chatId]);
 
-    // Subscribe to new messages
-    const subscription = supabase
+  useEffect(() => {
+    // Subscribe to new messages and read status updates
+    const channel = supabase
       .channel(`messages:${chatId}`)
       .on('postgres_changes', {
-        event: 'INSERT',
+        event: '*',
         schema: 'public',
         table: 'messages',
         filter: `chat_id=eq.${chatId}`,
       }, async (payload) => {
-        // Fetch the sender information for the new message
-        const { data: sender } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', payload.new.sender_id)
-          .single();
+        if (payload.eventType === 'INSERT') {
+          // Fetch the sender information for the new message
+          const { data: sender } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', payload.new.sender_id)
+            .single();
 
-        const newMessage = {
-          ...payload.new,
-          sender,
-        };
+          const newMessage = {
+            ...payload.new,
+            sender,
+          };
 
-        setMessages(prev => [...prev, newMessage]);
+          // If the message is not from current user, mark it as read
+          if (payload.new.sender_id !== currentUser?.id) {
+            const { error: updateError } = await supabase
+              .from('messages')
+              .update({ read: true })
+              .eq('id', payload.new.id);
+
+            if (updateError) console.error('Error marking message as read:', updateError);
+          }
+
+          setMessages(prev => [...prev, newMessage]);
+        } else if (payload.eventType === 'UPDATE') {
+          // Update read status
+          setMessages(prev => prev.map(msg => 
+            msg.id === payload.new.id ? { ...msg, read: payload.new.read } : msg
+          ));
+        }
       })
       .subscribe();
 
     return () => {
-      subscription.unsubscribe();
+      channel.unsubscribe();
     };
-  }, [chatId]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+  }, [chatId, currentUser?.id]);
 
   const formatMessageTime = (timestamp) => {
     return format(new Date(timestamp), 'HH:mm');
@@ -95,7 +121,7 @@ export function MessageList({ chatId }) {
       </Avatar>
       <div
         className={cn(
-          "flex flex-col",
+          "flex flex-col max-w-[80%]",
           isCurrentUser && "items-end"
         )}
       >
@@ -107,51 +133,48 @@ export function MessageList({ chatId }) {
             {formatMessageTime(message.created_at)}
           </span>
         </div>
-        <div
-          className={cn(
-            "mt-1 rounded-2xl px-4 py-2 max-w-[80%]",
-            isCurrentUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted"
+        <div className="flex items-end gap-1">
+          <div
+            className={cn(
+              "mt-1 rounded-2xl px-4 py-2",
+              isCurrentUser
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted",
+              "flex items-center justify-center text-center" // Added these classes for center alignment
+            )}
+          >
+            {message.content}
+          </div>
+          {isCurrentUser && (
+            <span className="text-xs text-muted-foreground">
+              {message.read ? (
+                <CheckCheck className="h-4 w-4" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+            </span>
           )}
-        >
-          {message.content}
         </div>
       </div>
     </div>
   );
 
-  const groupMessagesByDate = (messages) => {
-    const groups = {};
-    messages.forEach(message => {
-      const date = new Date(message.created_at).toLocaleDateString();
-      if (!groups[date]) {
-        groups[date] = [];
-      }
-      groups[date].push(message);
-    });
-    return groups;
-  };
-
-  const messageGroups = groupMessagesByDate(messages);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col space-y-6">
-      {Object.entries(messageGroups).map(([date, messages]) => (
-        <div key={date} className="space-y-4">
-          <div className="sticky top-0 flex justify-center">
-            <span className="text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded-full backdrop-blur-sm">
-              {date === new Date().toLocaleDateString() ? 'Today' : date}
-            </span>
-          </div>
-          {messages.map(message => (
-            <MessageComponent
-              key={message.id}
-              message={message}
-              isCurrentUser={message.sender_id === currentUser?.id}
-            />
-          ))}
-        </div>
+    <div className="flex flex-col space-y-4">
+      {messages.map(message => (
+        <MessageComponent
+          key={message.id}
+          message={message}
+          isCurrentUser={message.sender_id === currentUser?.id}
+        />
       ))}
     </div>
   );

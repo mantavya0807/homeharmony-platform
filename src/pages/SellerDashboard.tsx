@@ -1,3 +1,4 @@
+// SellerDashboard.tsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,18 +15,35 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { 
+import { Checkbox } from "@/components/ui/checkbox"; // Ensure you have a Checkbox component
+import { useToast } from "@/components/ui/use-toast";
+import type { Database } from "@/integrations/supabase/types";
+import { EditPropertyDialog } from "./EditPropertyDialog";
+import AddHousingComplex from "@/components/AddHousingComplex"; // Import the new component
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/components/ui/use-toast";
-import type { Database } from "@/integrations/supabase/types";
 
 type Property = Database["public"]["Tables"]["properties"]["Row"];
+type HousingComplex = Database["public"]["Tables"]["housing_complexes"]["Row"];
+
+interface PropertyForm {
+  title: string;
+  price: string;
+  address: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  bedrooms: string;
+  bathrooms: string;
+  square_feet: string;
+  property_type: 'house' | 'apartment' | 'condo' | 'townhouse';
+  housing_complex_id?: string;
+}
 
 interface MediaFile {
   file: File;
@@ -39,12 +57,14 @@ export default function SellerDashboard() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false); // For property creation dialog
+  const [addComplexOpen, setAddComplexOpen] = useState(false); // For AddHousingComplex dialog
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+  const [isEditDialogOpen, setEditDialogOpen] = useState(false);
 
-  const [newProperty, setNewProperty] = useState({
+  const [newProperty, setNewProperty] = useState<PropertyForm>({
     title: "",
-    description: "",
     price: "",
     address: "",
     city: "",
@@ -53,9 +73,14 @@ export default function SellerDashboard() {
     bedrooms: "",
     bathrooms: "",
     square_feet: "",
-    property_type: "house" as const,
+    property_type: "house",
+    housing_complex_id: "",
   });
 
+  const [housingComplexes, setHousingComplexes] = useState<HousingComplex[]>([]);
+  const [loadingHousingComplexes, setLoadingHousingComplexes] = useState(true);
+
+  // Fetch properties and housing complexes on component mount
   useEffect(() => {
     const fetchProperties = async () => {
       try {
@@ -88,7 +113,8 @@ export default function SellerDashboard() {
         const { data: properties, error: propertiesError } = await supabase
           .from("properties")
           .select("*")
-          .eq("seller_id", session.user.id);
+          .eq("seller_id", session.user.id)
+          .order("created_at", { ascending: false });
 
         if (propertiesError) {
           throw propertiesError;
@@ -109,7 +135,32 @@ export default function SellerDashboard() {
       }
     };
 
+    const fetchHousingComplexes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("housing_complexes")
+          .select("*")
+          .order("name", { ascending: true });
+
+        if (error) throw error;
+
+        if (data) {
+          setHousingComplexes(data);
+        }
+      } catch (error) {
+        console.error("Error fetching housing complexes:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load housing complexes.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingHousingComplexes(false);
+      }
+    };
+
     fetchProperties();
+    fetchHousingComplexes();
   }, [navigate, toast]);
 
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -187,14 +238,10 @@ export default function SellerDashboard() {
         }
 
         // Get the public URL
-        const { data: publicUrlData, error: urlError } = supabase.storage
+        const { data: publicUrlData } = supabase.storage
           .from('property-media')
           .getPublicUrl(fileName);
         
-        if (urlError) {
-          throw urlError;
-        }
-
         return publicUrlData.publicUrl;
       } catch (error) {
         console.error('Error uploading file:', error);
@@ -212,99 +259,133 @@ export default function SellerDashboard() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) return;
     setUploading(true);
-    
+
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        throw sessionError;
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error("Not authenticated");
 
-      if (!session) {
-        toast({
-          title: "Error",
-          description: "You must be logged in to create a listing",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Validate media files
-      if (mediaFiles.length === 0) {
-        toast({
-          title: "Error",
-          description: "Please upload at least one image",
-          variant: "destructive",
-        });
-        setUploading(false);
-        return;
-      }
-
-      // First create the property
+      // Create property
       const { data, error } = await supabase
         .from("properties")
         .insert([
           {
-            ...newProperty,
+            title: newProperty.title,
             price: parseFloat(newProperty.price),
+            address: newProperty.address,
+            city: newProperty.city,
+            state: newProperty.state,
+            zip_code: newProperty.zip_code,
             bedrooms: parseInt(newProperty.bedrooms),
             bathrooms: parseInt(newProperty.bathrooms),
             square_feet: parseInt(newProperty.square_feet),
+            property_type: newProperty.property_type,
+            housing_complex_id: newProperty.housing_complex_id,
             seller_id: session.user.id,
             images: [], // Initialize with empty array
           },
         ])
-        .select();
+        .select()
+        .single();
 
       if (error) throw error;
-      if (!data?.[0]) throw new Error("Failed to create property");
+      if (!data) throw new Error("Failed to create property");
 
-      // Then upload media files
-      const mediaUrls = await uploadMedia(data[0].id);
+      // Upload media
+      const mediaUrls = await uploadMedia(data.id);
 
       // Update property with media URLs
       const { error: updateError } = await supabase
         .from("properties")
         .update({ images: mediaUrls })
-        .eq("id", data[0].id);
+        .eq("id", data.id);
 
       if (updateError) throw updateError;
 
       // Update local state
-      setProperties(prev => [...prev, { ...data[0], images: mediaUrls }]);
-      setOpen(false);
-      setMediaFiles([]);
-      setNewProperty({
-        title: "",
-        description: "",
-        price: "",
-        address: "",
-        city: "",
-        state: "",
-        zip_code: "",
-        bedrooms: "",
-        bathrooms: "",
-        square_feet: "",
-        property_type: "house",
-      });
-
+      setProperties(prev => [{ ...data, images: mediaUrls }, ...prev]);
+      resetForm();
       toast({
         title: "Success",
-        description: "Property listing created successfully",
+        description: "Property listed successfully",
       });
-    } catch (error) {
-      console.error('Error creating property listing:', error);
+
+    } catch (error: any) {
+      console.error('Error:', error);
       toast({
         title: "Error",
-        description: "Failed to create property listing",
+        description: error.message || "Failed to create property listing",
         variant: "destructive",
       });
     } finally {
       setUploading(false);
+      setOpen(false);
     }
   };
 
-  if (loading) {
+  const validateForm = (): boolean => {
+    if (mediaFiles.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please upload at least one image or video",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    const requiredFields = [
+      { key: "title", label: "Title" },
+      { key: "price", label: "Price" },
+      { key: "address", label: "Address" },
+      { key: "city", label: "City" },
+      { key: "state", label: "State" },
+      { key: "zip_code", label: "Zip Code" },
+      { key: "bedrooms", label: "Bedrooms" },
+      { key: "bathrooms", label: "Bathrooms" },
+      { key: "square_feet", label: "Square Feet" },
+      { key: "property_type", label: "Property Type" },
+      { key: "housing_complex_id", label: "Housing Complex" },
+    ];
+
+    for (const field of requiredFields) {
+      const value = (newProperty as any)[field.key];
+      if (!value || (field.key === "housing_complex_id" && value === "")) {
+        toast({
+          title: "Error",
+          description: `${field.label} is required`,
+          variant: "destructive",
+        });
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const resetForm = () => {
+    setNewProperty({
+      title: "",
+      price: "",
+      address: "",
+      city: "",
+      state: "",
+      zip_code: "",
+      bedrooms: "",
+      bathrooms: "",
+      square_feet: "",
+      property_type: "house",
+      housing_complex_id: "",
+    });
+    setMediaFiles([]);
+  };
+
+  const handleAddComplex = (newComplex: HousingComplex) => {
+    setHousingComplexes(prev => [...prev, newComplex]);
+    setNewProperty(prev => ({ ...prev, housing_complex_id: newComplex.id }));
+  };
+
+  if (loading || loadingHousingComplexes) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -323,7 +404,7 @@ export default function SellerDashboard() {
               Add New Property
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-[800px] h-auto overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Property</DialogTitle>
               <DialogDescription>
@@ -391,16 +472,34 @@ export default function SellerDashboard() {
                     required
                   />
                 </div>
+
+                {/* Housing Complex Section */}
                 <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={newProperty.description}
-                    onChange={(e) =>
-                      setNewProperty({ ...newProperty, description: e.target.value })
-                    }
-                    className="min-h-[100px]"
-                  />
+                  <Label htmlFor="housing_complex">Housing Complex</Label>
+                  <Select
+                    value={newProperty.housing_complex_id || ""}
+                    onValueChange={(value) => {
+                      if (value === "new") {
+                        setAddComplexOpen(true);
+                        setNewProperty({ ...newProperty, housing_complex_id: "" });
+                      } else {
+                        setNewProperty({ ...newProperty, housing_complex_id: value });
+                      }
+                    }}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select complex" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {housingComplexes.map((complex) => (
+                        <SelectItem key={complex.id} value={complex.id}>
+                          {complex.name}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="new">+ Add New Complex</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -425,6 +524,7 @@ export default function SellerDashboard() {
                     onValueChange={(value: Database["public"]["Enums"]["property_type"]) =>
                       setNewProperty({ ...newProperty, property_type: value })
                     }
+                    required
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select type" />
@@ -479,45 +579,9 @@ export default function SellerDashboard() {
               </div>
 
               {/* Property Features */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="bedrooms">Bedrooms</Label>
-                  <Input
-                    id="bedrooms"
-                    type="number"
-                    value={newProperty.bedrooms}
-                    onChange={(e) =>
-                      setNewProperty({ ...newProperty, bedrooms: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bathrooms">Bathrooms</Label>
-                  <Input
-                    id="bathrooms"
-                    type="number"
-                    value={newProperty.bathrooms}
-                    onChange={(e) =>
-                      setNewProperty({ ...newProperty, bathrooms: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="square_feet">Square Feet</Label>
-                  <Input
-                    id="square_feet"
-                    type="number"
-                    value={newProperty.square_feet}
-                    onChange={(e) =>
-                      setNewProperty({ ...newProperty, square_feet: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-              </div>
+              {/* Removed Amenities from Property Form as per requirement */}
 
+              {/* Submit Button */}
               <Button 
                 type="submit" 
                 className="w-full" 
@@ -536,7 +600,14 @@ export default function SellerDashboard() {
           </DialogContent>
         </Dialog>
       </div>
-      
+
+      {/* AddHousingComplex Component */}
+      <AddHousingComplex 
+        isOpen={addComplexOpen}
+        onClose={() => setAddComplexOpen(false)}
+        onAdd={handleAddComplex}
+      />
+
       {properties.length === 0 ? (
         <div className="text-center py-12">
           <div className="flex flex-col items-center justify-center space-y-4">
@@ -558,6 +629,7 @@ export default function SellerDashboard() {
           {properties.map((property) => (
             <div key={property.id} className="group relative">
               <PropertyCard
+                id={property.id}
                 title={property.title}
                 price={property.price}
                 location={`${property.city}, ${property.state}`}
@@ -571,15 +643,26 @@ export default function SellerDashboard() {
                   variant="secondary"
                   size="sm"
                   onClick={() => {
-                    // Edit functionality can be added here
-                    toast({
-                      title: "Coming Soon",
-                      description: "Edit functionality will be available soon!",
-                    });
+                    console.log("Editing property:", property);
+                    setEditingProperty(property); // Set the property to be edited
+                    setEditDialogOpen(true); // Open the dialog
                   }}
                 >
                   Edit
                 </Button>
+                <EditPropertyDialog
+                  isOpen={isEditDialogOpen}
+                  onClose={() => {
+                    setEditDialogOpen(false);
+                    setEditingProperty(null);
+                  }}
+                  property={editingProperty}
+                  onUpdate={(updatedProperty) => {
+                    setProperties((prev) =>
+                      prev.map((p) => (p.id === updatedProperty.id ? updatedProperty : p))
+                    );
+                  }}
+                />
                 <Button 
                   variant="destructive"
                   size="sm"

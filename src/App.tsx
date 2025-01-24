@@ -13,31 +13,59 @@ import { Navigation } from "./components/Navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "./integrations/supabase/client";
 import PropertyDetails from "./components/PropertyDetails";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { Loader2 } from "lucide-react";
+import HousingComplexes from "./components/HousingComplexes";
 
 const queryClient = new QueryClient();
 
 const App = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [session, setSession] = useState(null);
+  const [userRole, setUserRole] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setIsAuthenticated(!!session);
-      
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
       if (session) {
-        const { data: profile } = await supabase
+        // Get user profile
+        supabase
           .from('profiles')
           .select('role')
           .eq('id', session.user.id)
-          .single();
-        
-        setUserRole(profile?.role || null);
+          .single()
+          .then(({ data }) => {
+            setUserRole(data?.role || null);
+            setLoading(false);
+          });
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      setSession(newSession);
+      
+      if (newSession) {
+        // Get user profile when auth state changes
+        supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', newSession.user.id)
+          .single()
+          .then(({ data }) => {
+            setUserRole(data?.role || null);
+          });
       } else {
         setUserRole(null);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (
@@ -48,13 +76,14 @@ const App = () => {
           <Sonner />
           <BrowserRouter>
             <div className="min-h-screen bg-background text-foreground">
-              <Navigation />
+              <Navigation isAuthenticated={!!session} userRole={userRole} />
               <Routes>
                 <Route path="/" element={<Index />} />
+                <Route path="/housing-complexes" element={<HousingComplexes />} />
                 <Route
                   path="/auth"
                   element={
-                    isAuthenticated ? (
+                    session ? (
                       <Navigate to={userRole === 'seller' ? '/seller-dashboard' : '/dashboard'} />
                     ) : (
                       <Auth />
@@ -64,7 +93,7 @@ const App = () => {
                 <Route
                   path="/dashboard"
                   element={
-                    !isAuthenticated ? (
+                    !session ? (
                       <Navigate to="/auth" />
                     ) : userRole === "seller" ? (
                       <Navigate to="/seller-dashboard" />
@@ -76,15 +105,17 @@ const App = () => {
                 <Route
                   path="/chat"
                   element={
-                    <ProtectedRoute 
-                      element={<ChatInterface />} 
-                    />
+                    !session ? (
+                      <Navigate to="/auth" />
+                    ) : (
+                      <ChatInterface />
+                    )
                   }
-                  />
+                />
                 <Route
                   path="/seller-dashboard"
                   element={
-                    !isAuthenticated ? (
+                    !session ? (
                       <Navigate to="/auth" />
                     ) : userRole !== "seller" ? (
                       <Navigate to="/dashboard" />
@@ -93,11 +124,10 @@ const App = () => {
                     )
                   }
                 />
-                {/* New Property Details Route */}
                 <Route
                   path="/properties/:id"
                   element={
-                    !isAuthenticated ? (
+                    !session ? (
                       <Navigate to="/auth" />
                     ) : (
                       <PropertyDetails />

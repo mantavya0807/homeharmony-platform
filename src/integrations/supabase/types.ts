@@ -10,6 +10,7 @@ export type Database = {
   public: {
     Tables: {
       profiles: {
+        
         Row: {
           avatar_url: string | null
           created_at: string
