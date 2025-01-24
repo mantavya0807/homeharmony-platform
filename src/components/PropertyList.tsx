@@ -1,9 +1,31 @@
 import { PropertyCard } from "./PropertyCard";
+import { PropertyCard as SellerPropertyCard } from "./PropertyCard1";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
 
 export function PropertyList({ location, filters }) {
+  const [userRole, setUserRole] = useState(null);
+
+  // Get user role on component mount
+  useEffect(() => {
+    const getUserRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        
+        setUserRole(profile?.role);
+      }
+    };
+
+    getUserRole();
+  }, []);
+
   const { data: properties, isLoading } = useQuery({
     queryKey: ["properties", location, filters],
     queryFn: async () => {
@@ -39,13 +61,10 @@ export function PropertyList({ location, filters }) {
 
       // Apply price range filter
       if (filters?.priceRange) {
-        // Make sure to handle price range as numbers
         const [minPrice, maxPrice] = filters.priceRange;
         query = query
           .gte('price', minPrice)
           .lte('price', maxPrice);
-
-        console.log('Applying price filter:', minPrice, maxPrice); // Debug log
       }
 
       const { data, error } = await query;
@@ -80,11 +99,14 @@ export function PropertyList({ location, filters }) {
       </div>
     );
   }
+  console.log(userRole);
+  // Choose which PropertyCard component to use based on role
+  const CardComponent = userRole === "seller" ? SellerPropertyCard : PropertyCard;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
       {properties.map((property) => (
-        <PropertyCard
+        <CardComponent
           key={property.id}
           id={property.id}
           title={property.title}
@@ -94,6 +116,7 @@ export function PropertyList({ location, filters }) {
           baths={property.bathrooms}
           sqft={property.square_feet}
           imageUrl={property.images?.[0] || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"}
+          userRole={userRole}
         />
       ))}
     </div>

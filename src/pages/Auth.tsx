@@ -15,7 +15,8 @@ type ViewType = "role" | "login" | "register";
 export default function Auth() {
   const navigate = useNavigate();
   const location = useLocation();
-  const initialView = (location.state?.initialView || "role") as ViewType;
+  // Set login as default view if no initialView specified
+  const initialView = (location.state?.initialView || "login") as ViewType;
 
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);

@@ -1,11 +1,10 @@
-// SellerDashboard.tsx
+// src/pages/SellerDashboard.tsx
 
-import { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Plus, Upload, X, Image as ImageIcon, Video as VideoIcon, Loader2 } from "lucide-react";
-import { PropertyCard } from "@/components/PropertyCard";
+import { Plus, Upload, X, Image as ImageIcon, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,32 +15,26 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox"; // Ensure you have a Checkbox component
-import { useToast } from "@/components/ui/use-toast";
-import type { Database } from "@/integrations/supabase/types";
-import { EditPropertyDialog } from "./EditPropertyDialog";
-import AddHousingComplex from "@/components/AddHousingComplex"; // Import the new component
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,  // Add this import with other UI component imports
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { PropertyCard } from "@/components/PropertyCard1";
+import { EditPropertyDialog } from "@/pages/EditPropertyDialog";
+import AddHousingComplex from "@/components/AddHousingComplex";
 
-// Rest of your imports stay the same
+// Import the new AddressInput component
+import { AddressInput } from "@/components/AddressInput";
+
+import type { Database } from "@/integrations/supabase/types";
 
 type Property = Database["public"]["Tables"]["properties"]["Row"];
 type HousingComplex = Database["public"]["Tables"]["housing_complexes"]["Row"];
 
-// Update PropertyForm interface
 interface PropertyForm {
   title: string;
-  description: string; // Added
+  description: string;
   price: string;
-  property_type: 'house' | 'apartment' | 'condo' | 'townhouse';
+  property_type: "house" | "apartment" | "condo" | "townhouse";
   bedrooms: string;
   bathrooms: string;
   square_feet: string;
@@ -50,13 +43,12 @@ interface PropertyForm {
   state: string;
   zip_code: string;
   housing_complex_id?: string;
-  google_maps_link?: string;
 }
 
 interface MediaFile {
   file: File;
   preview: string;
-  type: 'image' | 'video';
+  type: "image" | "video";
 }
 
 export default function SellerDashboard() {
@@ -65,16 +57,17 @@ export default function SellerDashboard() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [open, setOpen] = useState(false); // For property creation dialog
-  const [addComplexOpen, setAddComplexOpen] = useState(false); // For AddHousingComplex dialog
+  const [open, setOpen] = useState(false);
+  const [addComplexOpen, setAddComplexOpen] = useState(false);
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [isEditDialogOpen, setEditDialogOpen] = useState(false);
+  const [housingComplexes, setHousingComplexes] = useState<HousingComplex[]>([]);
+  const [loadingHousingComplexes, setLoadingHousingComplexes] = useState(true);
 
-  // Initialize state with all fields
   const [newProperty, setNewProperty] = useState<PropertyForm>({
     title: "",
-    description: "", // Added
+    description: "",
     price: "",
     address: "",
     city: "",
@@ -85,100 +78,81 @@ export default function SellerDashboard() {
     square_feet: "",
     property_type: "house",
     housing_complex_id: "",
-    google_maps_link: "",
   });
 
-  const [housingComplexes, setHousingComplexes] = useState<HousingComplex[]>([]);
-  const [loadingHousingComplexes, setLoadingHousingComplexes] = useState(true);
-
-  // Fetch properties and housing complexes on component mount
   useEffect(() => {
-    const fetchProperties = async () => {
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          throw sessionError;
-        }
-
-        if (!session) {
-          navigate("/auth");
-          return;
-        }
-
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", session.user.id)
-          .single();
-
-        if (profileError) {
-          throw profileError;
-        }
-
-        if (profile?.role !== "seller") {
-          navigate("/dashboard");
-          return;
-        }
-
-        const { data: properties, error: propertiesError } = await supabase
-          .from("properties")
-          .select("*")
-          .eq("seller_id", session.user.id)
-          .order("created_at", { ascending: false });
-
-        if (propertiesError) {
-          throw propertiesError;
-        }
-
-        if (properties) {
-          setProperties(properties);
-        }
-      } catch (error) {
-        console.error('Error fetching properties:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load properties. Please try again later.",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const fetchHousingComplexes = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("housing_complexes")
-          .select("*")
-          .order("name", { ascending: true });
-
-        if (error) throw error;
-
-        if (data) {
-          setHousingComplexes(data);
-        }
-      } catch (error) {
-        console.error("Error fetching housing complexes:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load housing complexes.",
-          variant: "destructive",
-        });
-      } finally {
-        setLoadingHousingComplexes(false);
-      }
-    };
-
     fetchProperties();
     fetchHousingComplexes();
-  }, [navigate, toast]);
+  }, [navigate]);
+
+  const fetchProperties = async () => {
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+
+      if (profile?.role !== "seller") {
+        navigate("/dashboard");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("properties")
+        .select("*")
+        .eq("seller_id", session.user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setProperties(data || []);
+    } catch (error) {
+      console.error("Error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load properties",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchHousingComplexes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("housing_complexes")
+        .select("*")
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+      setHousingComplexes(data || []);
+    } catch (error) {
+      console.error("Error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load housing complexes",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingHousingComplexes(false);
+    }
+  };
 
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    
-    files.forEach(file => {
-      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+    files.forEach((file) => {
+      if (file.size > 10 * 1024 * 1024) {
         toast({
           title: "File too large",
           description: "Each file must be less than 10MB",
@@ -187,125 +161,90 @@ export default function SellerDashboard() {
         return;
       }
 
-      const type = file.type.startsWith('image/') ? 'image' : 'video';
+      const type = file.type.startsWith("image/") ? "image" : "video";
       const reader = new FileReader();
-      
       reader.onloadend = () => {
-        setMediaFiles(prev => [...prev, {
-          file,
-          preview: reader.result as string,
-          type
-        }]);
+        setMediaFiles((prev) => [
+          ...prev,
+          {
+            file,
+            preview: reader.result as string,
+            type,
+          },
+        ]);
       };
-      
       reader.readAsDataURL(file);
     });
   };
 
   const removeMedia = (index: number) => {
-    setMediaFiles(prev => prev.filter((_, i) => i !== index));
+    setMediaFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const uploadMedia = async (propertyId: string) => {
     const uploadPromises = mediaFiles.map(async (mediaFile, index) => {
       try {
-        const fileExt = mediaFile.file.name.split('.').pop();
-        // Create a more unique filename using timestamp
+        const fileExt = mediaFile.file.name.split(".").pop();
         const fileName = `${propertyId}/${Date.now()}-${index}.${fileExt}`;
-        
-        // First check if file exists and remove it
-        const { data: existingFiles, error: listError } = await supabase.storage
-          .from('property-media')
+
+        // Remove existing files in that folder to avoid clutter
+        const { data: existingFiles } = await supabase.storage
+          .from("property-media")
           .list(`${propertyId}`);
 
-        if (listError) {
-          throw listError;
+        if (existingFiles?.length) {
+          const filesToRemove = existingFiles.map(
+            (file) => `${propertyId}/${file.name}`
+          );
+          await supabase.storage.from("property-media").remove(filesToRemove);
         }
 
-        if (existingFiles && existingFiles.length > 0) {
-          const filesToRemove = existingFiles.map(file => `${propertyId}/${file.name}`);
-          const { error: removeError } = await supabase.storage
-            .from('property-media')
-            .remove(filesToRemove);
-            
-          if (removeError) {
-            console.error('Error removing existing files:', removeError);
-            // Decide whether to throw or continue
-            // throw removeError;
-          }
-        }
-
-        // Upload the new file
+        // Upload new file
         const { error: uploadError } = await supabase.storage
-          .from('property-media')
+          .from("property-media")
           .upload(fileName, mediaFile.file, {
-            cacheControl: '3600',
+            cacheControl: "3600",
             upsert: true,
-            contentType: mediaFile.file.type // Explicitly set content type
           });
 
-        if (uploadError) {
-          throw uploadError;
-        }
+        if (uploadError) throw uploadError;
 
-        // Get the public URL
-        const { data: publicUrlData } = supabase.storage
-          .from('property-media')
+        const { data } = supabase.storage
+          .from("property-media")
           .getPublicUrl(fileName);
-        
-        return publicUrlData.publicUrl;
+
+        return data.publicUrl;
       } catch (error) {
-        console.error('Error uploading file:', error);
+        console.error("Error:", error);
         throw error;
       }
     });
 
-    try {
-      return await Promise.all(uploadPromises);
-    } catch (error) {
-      console.error('Error in upload promises:', error);
-      throw error;
-    }
+    return await Promise.all(uploadPromises);
   };
 
-  // Update handleSubmit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
     setUploading(true);
 
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error("Not authenticated");
 
-      if (sessionError) {
-        throw sessionError;
-      }
-
-      if (!session) {
-        navigate("/auth");
-        return;
-      }
-
-      // Create property
       const { data, error } = await supabase
         .from("properties")
         .insert([
           {
-            title: newProperty.title,
-            description: newProperty.description, // Added
+            ...newProperty,
             price: parseFloat(newProperty.price),
-            address: newProperty.address,
-            city: newProperty.city,
-            state: newProperty.state,
-            zip_code: newProperty.zip_code,
             bedrooms: parseInt(newProperty.bedrooms),
             bathrooms: parseInt(newProperty.bathrooms),
             square_feet: parseInt(newProperty.square_feet),
-            property_type: newProperty.property_type,
-            housing_complex_id: newProperty.housing_complex_id,
             seller_id: session.user.id,
-            images: [], // Initialize with empty array
-            google_maps_link: newProperty.google_maps_link || null, // Add the new field
+            images: [],
           },
         ])
         .select()
@@ -314,10 +253,8 @@ export default function SellerDashboard() {
       if (error) throw error;
       if (!data) throw new Error("Failed to create property");
 
-      // Upload media
       const mediaUrls = await uploadMedia(data.id);
 
-      // Update property with media URLs
       const { error: updateError } = await supabase
         .from("properties")
         .update({ images: mediaUrls })
@@ -325,71 +262,61 @@ export default function SellerDashboard() {
 
       if (updateError) throw updateError;
 
-      // Update local state
-      setProperties(prev => [{ ...data, images: mediaUrls }, ...prev]);
+      setProperties((prev) => [{ ...data, images: mediaUrls }, ...prev]);
       resetForm();
+      setOpen(false);
       toast({
         title: "Success",
         description: "Property listed successfully",
       });
-
     } catch (error: any) {
-      console.error('Error:', error);
+      console.error("Error:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create property listing",
+        description: error.message || "Failed to create property",
         variant: "destructive",
       });
     } finally {
       setUploading(false);
-      setOpen(false);
     }
   };
 
-  // Update form validation
-  const validateForm = (): boolean => {
+  const validateForm = () => {
     if (mediaFiles.length === 0) {
       toast({
         title: "Error",
-        description: "Please upload at least one image or video",
+        description: "Please upload at least one image",
         variant: "destructive",
       });
       return false;
     }
 
-    const requiredFields = [
-      { key: "title", label: "Title" },
-      { key: "description", label: "Description" },
-      { key: "price", label: "Price" },
-      { key: "address", label: "Address" },
-      { key: "city", label: "City" },
-      { key: "state", label: "State" },
-      { key: "zip_code", label: "Zip Code" },
-      { key: "bedrooms", label: "Bedrooms" },
-      { key: "bathrooms", label: "Bathrooms" },
-      { key: "square_feet", label: "Square Feet" },
-      { key: "property_type", label: "Property Type" },
-      { key: "housing_complex_id", label: "Housing Complex" },
+    const required = [
+      "title",
+      "description",
+      "price",
+      "address",
+      "city",
+      "state",
+      "zip_code",
+      "bedrooms",
+      "bathrooms",
+      "square_feet",
+      "property_type",
     ];
 
-    for (const field of requiredFields) {
-      const value = (newProperty as any)[field.key];
-      if (!value || (field.key === "housing_complex_id" && value === "")) {
+    for (const field of required) {
+      if (!newProperty[field as keyof PropertyForm]) {
         toast({
           title: "Error",
-          description: `${field.label} is required`,
+          description: `${field.replace("_", " ")} is required`,
           variant: "destructive",
         });
         return false;
       }
     }
 
-    // Optional: Validate Google Maps URL if provided
-
-
-    // Validate ZIP code format
-    const zipCodePattern = /^\d{5}$/;
-    if (!zipCodePattern.test(newProperty.zip_code)) {
+    if (!/^\d{5}$/.test(newProperty.zip_code)) {
       toast({
         title: "Error",
         description: "Please enter a valid 5-digit ZIP code",
@@ -404,7 +331,7 @@ export default function SellerDashboard() {
   const resetForm = () => {
     setNewProperty({
       title: "",
-      description: "", // Reset the field
+      description: "",
       price: "",
       address: "",
       city: "",
@@ -415,14 +342,13 @@ export default function SellerDashboard() {
       square_feet: "",
       property_type: "house",
       housing_complex_id: "",
-      google_maps_link: "", // Reset the field
     });
     setMediaFiles([]);
   };
 
   const handleAddComplex = (newComplex: HousingComplex) => {
-    setHousingComplexes(prev => [...prev, newComplex]);
-    setNewProperty(prev => ({ ...prev, housing_complex_id: newComplex.id }));
+    setHousingComplexes((prev) => [...prev, newComplex]);
+    setNewProperty((prev) => ({ ...prev, housing_complex_id: newComplex.id }));
   };
 
   if (loading || loadingHousingComplexes) {
@@ -444,22 +370,22 @@ export default function SellerDashboard() {
               Add New Property
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-h-[80vh] flex flex-col">
-            <DialogHeader>
+          <DialogContent className="sm:max-w-[800px] max-h-[90vh] p-0">
+            <DialogHeader className="p-6 pb-4">
               <DialogTitle>Add New Property</DialogTitle>
               <DialogDescription>
                 Enter the details of your property listing.
               </DialogDescription>
             </DialogHeader>
-            <ScrollArea className="flex-1">
-              <form onSubmit={handleSubmit} className="space-y-6 pr-4">
+            <ScrollArea className="h-[calc(90vh-8rem)] px-6 pb-6">
+              <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Media Upload Section */}
                 <div className="space-y-4">
                   <Label>Property Media</Label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {mediaFiles.map((file, index) => (
                       <div key={index} className="relative group">
-                        {file.type === 'image' ? (
+                        {file.type === "image" ? (
                           <img
                             src={file.preview}
                             alt={`Preview ${index}`}
@@ -484,7 +410,9 @@ export default function SellerDashboard() {
                     <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg border-muted-foreground/25 hover:border-muted-foreground/50 cursor-pointer transition-colors">
                       <div className="flex flex-col items-center justify-center">
                         <Upload className="h-6 w-6 mb-2 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Upload</span>
+                        <span className="text-xs text-muted-foreground">
+                          Upload
+                        </span>
                       </div>
                       <input
                         type="file"
@@ -514,16 +442,19 @@ export default function SellerDashboard() {
                     />
                   </div>
 
-                  {/* Add description field to the form */}
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>
                     <Textarea
                       id="description"
                       value={newProperty.description}
                       onChange={(e) =>
-                        setNewProperty({ ...newProperty, description: e.target.value })
+                        setNewProperty({
+                          ...newProperty,
+                          description: e.target.value,
+                        })
                       }
                       placeholder="Describe your property..."
+                      className="min-h-[100px]"
                       required
                     />
                   </div>
@@ -531,49 +462,54 @@ export default function SellerDashboard() {
                   {/* Housing Complex Section */}
                   <div className="space-y-2">
                     <Label htmlFor="housing_complex">Housing Complex</Label>
-                    <Select
+                    <select
+                      className="border rounded p-2 w-full"
                       value={newProperty.housing_complex_id || ""}
-                      onValueChange={(value) => {
-                        if (value === "new") {
+                      onChange={(e) => {
+                        if (e.target.value === "new") {
                           setAddComplexOpen(true);
-                          setNewProperty({ ...newProperty, housing_complex_id: "" });
+                          setNewProperty({
+                            ...newProperty,
+                            housing_complex_id: "",
+                          });
                         } else {
-                          setNewProperty({ ...newProperty, housing_complex_id: value });
+                          setNewProperty({
+                            ...newProperty,
+                            housing_complex_id: e.target.value,
+                          });
                         }
                       }}
-                      required
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select complex" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {housingComplexes.map((complex) => (
-                          <SelectItem key={complex.id} value={complex.id}>
-                            {complex.name}
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="new">+ Add New Complex</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      <option value="">Select a complex (optional)</option>
+                      {housingComplexes.map((complex) => (
+                        <option key={complex.id} value={complex.id}>
+                          {complex.name}
+                        </option>
+                      ))}
+                      <option value="new">+ Add New Complex</option>
+                    </select>
                   </div>
                 </div>
 
-                {/* Google Maps Link */}
-                <div className="space-y-2">
-                  <Label htmlFor="google_maps_link">Google Maps Link</Label>
-                  <Input
-                    id="google_maps_link"
-                    type="url"
-                    placeholder="https://maps.google.com/..."
-                    value={newProperty.google_maps_link}
-                    onChange={(e) =>
-                      setNewProperty({ ...newProperty, google_maps_link: e.target.value })
-                    }
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Provide a Google Maps URL for the property's location (optional).
-                  </p>
-                </div>
+                {/* Address Information Section */}
+                <AddressInput
+                  address={newProperty.address}
+                  city={newProperty.city}
+                  state={newProperty.state}
+                  zipCode={newProperty.zip_code}
+                  onAddressChange={(address) =>
+                    setNewProperty((prev) => ({ ...prev, address }))
+                  }
+                  onCityChange={(city) =>
+                    setNewProperty((prev) => ({ ...prev, city }))
+                  }
+                  onStateChange={(state) =>
+                    setNewProperty((prev) => ({ ...prev, state }))
+                  }
+                  onZipCodeChange={(zip) =>
+                    setNewProperty((prev) => ({ ...prev, zip_code: zip }))
+                  }
+                />
 
                 {/* Property Details */}
                 <div className="grid grid-cols-2 gap-4">
@@ -584,30 +520,36 @@ export default function SellerDashboard() {
                       type="number"
                       value={newProperty.price}
                       onChange={(e) =>
-                        setNewProperty({ ...newProperty, price: e.target.value })
+                        setNewProperty({
+                          ...newProperty,
+                          price: e.target.value,
+                        })
                       }
                       required
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="property_type">Property Type</Label>
-                    <Select
+                    <select
+                      className="border rounded p-2 w-full"
+                      id="property_type"
                       value={newProperty.property_type}
-                      onValueChange={(value: Database["public"]["Enums"]["property_type"]) =>
-                        setNewProperty({ ...newProperty, property_type: value })
+                      onChange={(e) =>
+                        setNewProperty({
+                          ...newProperty,
+                          property_type: e.target.value as
+                            | "house"
+                            | "apartment"
+                            | "condo"
+                            | "townhouse",
+                        })
                       }
-                      required
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="house">House</SelectItem>
-                        <SelectItem value="apartment">Apartment</SelectItem>
-                        <SelectItem value="condo">Condo</SelectItem>
-                        <SelectItem value="townhouse">Townhouse</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      <option value="house">House</option>
+                      <option value="apartment">Apartment</option>
+                      <option value="condo">Condo</option>
+                      <option value="townhouse">Townhouse</option>
+                    </select>
                   </div>
                 </div>
 
@@ -620,7 +562,10 @@ export default function SellerDashboard() {
                       min="1"
                       value={newProperty.bedrooms}
                       onChange={(e) =>
-                        setNewProperty({ ...newProperty, bedrooms: e.target.value })
+                        setNewProperty({
+                          ...newProperty,
+                          bedrooms: e.target.value,
+                        })
                       }
                       required
                     />
@@ -634,7 +579,10 @@ export default function SellerDashboard() {
                       step="0.5"
                       value={newProperty.bathrooms}
                       onChange={(e) =>
-                        setNewProperty({ ...newProperty, bathrooms: e.target.value })
+                        setNewProperty({
+                          ...newProperty,
+                          bathrooms: e.target.value,
+                        })
                       }
                       required
                     />
@@ -647,72 +595,17 @@ export default function SellerDashboard() {
                       min="1"
                       value={newProperty.square_feet}
                       onChange={(e) =>
-                        setNewProperty({ ...newProperty, square_feet: e.target.value })
+                        setNewProperty({
+                          ...newProperty,
+                          square_feet: e.target.value,
+                        })
                       }
                       required
                     />
                   </div>
                 </div>
 
-                {/* Address Information */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="address">Address</Label>
-                    <Input
-                      id="address"
-                      value={newProperty.address}
-                      onChange={(e) =>
-                        setNewProperty({ ...newProperty, address: e.target.value })
-                      }
-                      required
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="city">City</Label>
-                      <Input
-                        id="city"
-                        value={newProperty.city}
-                        onChange={(e) =>
-                          setNewProperty({ ...newProperty, city: e.target.value })
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="state">State</Label>
-                      <Input
-                        id="state"
-                        value={newProperty.state}
-                        onChange={(e) =>
-                          setNewProperty({ ...newProperty, state: e.target.value })
-                        }
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="zip_code">ZIP Code</Label>
-                    <Input
-                      id="zip_code"
-                      value={newProperty.zip_code}
-                      onChange={(e) =>
-                        setNewProperty({ ...newProperty, zip_code: e.target.value })
-                      }
-                      pattern="[0-9]{5}"
-                      maxLength={5}
-                      placeholder="12345"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Submit Button */}
-                <Button 
-                  type="submit" 
-                  className="w-full" 
-                  disabled={uploading}
-                >
+                <Button type="submit" className="w-full" disabled={uploading}>
                   {uploading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -728,8 +621,7 @@ export default function SellerDashboard() {
         </Dialog>
       </div>
 
-      {/* AddHousingComplex Component */}
-      <AddHousingComplex 
+      <AddHousingComplex
         isOpen={addComplexOpen}
         onClose={() => setAddComplexOpen(false)}
         onAdd={handleAddComplex}
@@ -743,7 +635,8 @@ export default function SellerDashboard() {
             </div>
             <h2 className="text-2xl font-semibold">No Properties Listed</h2>
             <p className="text-muted-foreground max-w-sm">
-              Start by adding your first property listing. Click the "Add New Property" button above to get started.
+              Start by adding your first property listing. Click the "Add New
+              Property" button above to get started.
             </p>
             <Button onClick={() => setOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
@@ -763,22 +656,24 @@ export default function SellerDashboard() {
                 beds={property.bedrooms}
                 baths={property.bathrooms}
                 sqft={property.square_feet}
-                imageUrl={property.images?.[0] || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"}
+                imageUrl={
+                  property.images?.[0] ||
+                  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"
+                }
               />
               <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 rounded-lg">
-                <Button 
+                <Button
                   variant="secondary"
                   size="sm"
                   onClick={() => {
-                    console.log("Editing property:", property);
-                    setEditingProperty(property); // Set the property to be edited
-                    setEditDialogOpen(true); // Open the dialog
+                    setEditingProperty(property);
+                    setEditDialogOpen(true);
                   }}
                 >
                   Edit
                 </Button>
                 <EditPropertyDialog
-                  isOpen={isEditDialogOpen}
+                  isOpen={isEditDialogOpen && editingProperty?.id === property.id}
                   onClose={() => {
                     setEditDialogOpen(false);
                     setEditingProperty(null);
@@ -790,29 +685,38 @@ export default function SellerDashboard() {
                     );
                   }}
                 />
-                <Button 
+                <Button
                   variant="destructive"
                   size="sm"
                   onClick={async () => {
-                    const { error } = await supabase
-                      .from("properties")
-                      .delete()
-                      .eq("id", property.id);
+                    try {
+                      const { error } = await supabase
+                        .from("properties")
+                        .delete()
+                        .eq("id", property.id);
 
-                    if (error) {
+                      if (error) throw error;
+
+                      // Remove property media
+                      await supabase.storage
+                        .from("property-media")
+                        .remove([`${property.id}`]);
+
+                      setProperties((prev) =>
+                        prev.filter((p) => p.id !== property.id)
+                      );
+                      toast({
+                        title: "Success",
+                        description: "Property deleted successfully",
+                      });
+                    } catch (error) {
+                      console.error("Error:", error);
                       toast({
                         title: "Error",
                         description: "Failed to delete property",
                         variant: "destructive",
                       });
-                      return;
                     }
-
-                    setProperties(prev => prev.filter(p => p.id !== property.id));
-                    toast({
-                      title: "Success",
-                      description: "Property deleted successfully",
-                    });
                   }}
                 >
                   Delete

@@ -19,11 +19,13 @@ import {
   Bath,
   Square,
   Home,
-  Calendar,
   ArrowLeft,
   Loader2,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { motion } from "framer-motion";
+import { useSavedStatus } from "@/hooks/useSavedStatus"; // Import the custom hook
+import { cn } from "@/lib/utils"; // Import cn utility for class names
 
 interface Property {
   id: string;
@@ -57,18 +59,23 @@ export default function PropertyDetails() {
   const [error, setError] = useState<string | null>(null);
   const [contactLoading, setContactLoading] = useState(false);
 
+  // Use the custom hook for saved status
+  const { isSaved, loading: savingLoading, toggleSave } = useSavedStatus(id!);
+
   useEffect(() => {
     const fetchProperty = async () => {
       try {
         const { data, error } = await supabase
           .from("properties")
-          .select(`
-            *,
-            seller:seller_id (
-              id,
-              full_name
-            )
-          `)
+          .select(
+            `
+              *,
+              seller:seller_id (
+                id,
+                full_name
+              )
+            `
+          )
           .eq("id", id)
           .single();
 
@@ -174,6 +181,25 @@ export default function PropertyDetails() {
     }
   };
 
+  const handleSaveClick = async () => {
+    try {
+      await toggleSave();
+      toast({
+        title: isSaved ? "Property removed from saved list" : "Property saved!",
+        description: isSaved
+          ? "You can always save it again later."
+          : "You can view it in your saved properties.",
+        variant: isSaved ? "default" : "success",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to update saved status.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -186,7 +212,9 @@ export default function PropertyDetails() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <h2 className="text-2xl font-bold mb-4">Error</h2>
-        <p className="text-muted-foreground mb-4">{error || "Property not found"}</p>
+        <p className="text-muted-foreground mb-4">
+          {error || "Property not found"}
+        </p>
         <Button onClick={() => navigate(-1)}>Go Back</Button>
       </div>
     );
@@ -226,7 +254,8 @@ export default function PropertyDetails() {
               <div className="flex items-center gap-2 text-muted-foreground">
                 <MapPin className="h-4 w-4" />
                 <span>
-                  {property.address}, {property.city}, {property.state} {property.zip_code}
+                  {property.address}, {property.city}, {property.state}{" "}
+                  {property.zip_code}
                 </span>
               </div>
             </div>
@@ -277,39 +306,37 @@ export default function PropertyDetails() {
 
             {/* Google Maps Section */}
             {property.google_maps_link && (
-              // Replace the Location Card section with this:
-
-<Card>
-  <CardHeader>
-    <CardTitle>Location</CardTitle>
-  </CardHeader>
-  <CardContent>
-    <div className="aspect-video relative rounded-lg overflow-hidden">
-      <iframe
-        className="w-full h-[300px] border-0"
-        loading="lazy"
-        referrerPolicy="no-referrer-when-downgrade"
-        src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I
-          &q=${encodeURIComponent(`${property.address}, ${property.city}, ${property.state} ${property.zip_code}`)}
-          &zoom=15`}
-        allowFullScreen
-      ></iframe>
-    </div>
-    <div className="mt-4">
-      <a 
-        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-          `${property.address}, ${property.city}, ${property.state} ${property.zip_code}`
-        )}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <MapPin className="h-4 w-4" />
-        <span>Open in Google Maps</span>
-      </a>
-    </div>
-  </CardContent>
-</Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Location</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="aspect-video relative rounded-lg overflow-hidden">
+                    <iframe
+                      className="w-full h-[300px] border-0"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      src={`https://www.google.com/maps/embed/v1/place?key=YOUR_GOOGLE_MAPS_API_KEY&q=${encodeURIComponent(
+                        `${property.address}, ${property.city}, ${property.state} ${property.zip_code}`
+                      )}&zoom=15`}
+                      allowFullScreen
+                    ></iframe>
+                  </div>
+                  <div className="mt-4">
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                        `${property.address}, ${property.city}, ${property.state} ${property.zip_code}`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                    >
+                      <MapPin className="h-4 w-4" />
+                      <span>Open in Google Maps</span>
+                    </a>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
 
@@ -318,39 +345,68 @@ export default function PropertyDetails() {
             <Card>
               <CardHeader>
                 <CardTitle>Price</CardTitle>
-                <CardDescription>Property listed on {new Date(property.created_at).toLocaleDateString()}</CardDescription>
+                <CardDescription>
+                  Property listed on{" "}
+                  {new Date(property.created_at).toLocaleDateString()}
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">${property.price.toLocaleString()}</div>
+                <div className="text-3xl font-bold">
+                  ${property.price.toLocaleString()}
+                </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle>Agent Details</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Listed by: {property.seller?.full_name || "Unknown Agent"}
-                </p>
-                <Button 
-                  className="w-full" 
-                  size="lg"
-                  onClick={handleContactAgent}
-                  disabled={contactLoading}
-                >
-                  {contactLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Connecting...
-                    </>
-                  ) : (
-                    "Contact Agent"
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+            <CardHeader>
+  <CardTitle>Agent Details</CardTitle>
+</CardHeader>
+<CardContent className="pt-6 space-y-4">
+  <p className="text-sm text-muted-foreground">
+    Listed by: {property.seller?.full_name || "Unknown Agent"}
+  </p>
+  <motion.button
+    whileHover={{ scale: 1.05 }}
+    whileTap={{ scale: 0.95 }}
+    className={cn(
+      "w-full py-3 px-4 rounded-lg text-white font-semibold flex items-center justify-center transition-colors",
+      "bg-primary hover:bg-primary-dark"
+    )}
+    onClick={handleContactAgent}
+    disabled={contactLoading}
+  >
+    {contactLoading ? (
+      <>
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        Connecting...
+      </>
+    ) : (
+      "Contact Agent"
+    )}
+  </motion.button>
+</CardContent>
+</Card>
+
+{/* Save Property Button */}
+<motion.button
+  whileHover={{ scale: 1.05 }}
+  whileTap={{ scale: 0.95 }}
+  className={cn(
+    "w-full py-3 px-4 rounded-lg text-white font-semibold flex items-center justify-center transition-colors",
+    isSaved ? "bg-red-500 hover:bg-red-600" : "bg-primary hover:bg-primary-dark"
+  )}
+  onClick={handleSaveClick}
+  disabled={savingLoading}
+>
+  {savingLoading ? (
+    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+  ) : isSaved ? (
+    "Saved"
+  ) : (
+    "Save Property"
+  )}
+</motion.button>
+         </div>
         </div>
       </div>
     </div>

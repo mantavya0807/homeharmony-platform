@@ -16,6 +16,7 @@ import PropertyDetails from "./components/PropertyDetails";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Loader2 } from "lucide-react";
 import HousingComplexes from "./components/HousingComplexes";
+import SavedProperties from "./pages/SavedProperties";
 
 const queryClient = new QueryClient();
 
@@ -99,6 +100,16 @@ const App = () => {
                       <Navigate to="/seller-dashboard" />
                     ) : (
                       <Dashboard />
+                    )
+                  }
+                />
+                <Route
+                  path="/saved"
+                  element={
+                    !session ? (
+                      <Navigate to="/auth" />
+                    ) : (
+                      <SavedProperties />
                     )
                   }
                 />
