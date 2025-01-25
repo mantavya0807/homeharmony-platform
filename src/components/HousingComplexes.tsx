@@ -107,9 +107,25 @@ export default function HousingComplexes() {
   const [newReview, setNewReview] = useState({ rating: 0, review_text: "" });
   const [submittingReview, setSubmittingReview] = useState(false);
   const navigate = useNavigate();
-  
+  const [userRole, setUserRole] = useState<string | null>(null);
+
   useEffect(() => {
     fetchComplexes();
+  }, []);
+
+  useEffect(() => {
+    const getUserRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        setUserRole(profile?.role);
+      }
+    };
+    getUserRole();
   }, []);
 
   const fetchComplexes = async () => {
@@ -170,13 +186,12 @@ export default function HousingComplexes() {
       setSubmittingReview(true);
       
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      if (!session || userRole !== "buyer") {
         toast({
-          title: "Authentication required",
-          description: "Please sign in to submit a review",
+          title: "Not allowed",
+          description: "Only buyers can submit reviews",
           variant: "destructive",
         });
-        navigate("/auth");
         return;
       }
   
@@ -370,42 +385,44 @@ export default function HousingComplexes() {
                                 <p className="text-sm text-muted-foreground">No reviews yet.</p>
                               )}
 
-                              {/* Review Form - Now inside ScrollArea */}
-                              <div className="border-t pt-6">
-                                <h3 className="font-semibold mb-4">Write a Review</h3>
-                                <form onSubmit={handleReviewSubmit} className="space-y-4">
-                                  <div className="space-y-2">
-                                    <Label>Rating</Label>
-                                    <StarRating
-                                      rating={newReview.rating}
-                                      onRatingChange={(rating) => setNewReview(prev => ({ ...prev, rating }))}
-                                    />
-                                  </div>
-                                  <div className="space-y-2">
-                                    <Label>Review</Label>
-                                    <Textarea
-                                      value={newReview.review_text}
-                                      onChange={(e) => setNewReview(prev => ({ ...prev, review_text: e.target.value }))}
-                                      placeholder="Write your review here..."
-                                      required
-                                    />
-                                  </div>
-                                  <Button 
-                                    type="submit" 
-                                    disabled={submittingReview || newReview.rating === 0} 
-                                    className="w-full"
-                                  >
-                                    {submittingReview ? (
-                                      <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Submitting...
-                                      </>
-                                    ) : (
-                                      "Submit Review"
-                                    )}
-                                  </Button>
-                                </form>
-                              </div>
+                              {/* Only show review form for buyers */}
+                              {userRole === "buyer" && (
+                                <div className="border-t pt-6">
+                                  <h3 className="font-semibold mb-4">Write a Review</h3>
+                                  <form onSubmit={handleReviewSubmit} className="space-y-4">
+                                    <div className="space-y-2">
+                                      <Label>Rating</Label>
+                                      <StarRating
+                                        rating={newReview.rating}
+                                        onRatingChange={(rating) => setNewReview(prev => ({ ...prev, rating }))}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>Review</Label>
+                                      <Textarea
+                                        value={newReview.review_text}
+                                        onChange={(e) => setNewReview(prev => ({ ...prev, review_text: e.target.value }))}
+                                        placeholder="Write your review here..."
+                                        required
+                                      />
+                                    </div>
+                                    <Button 
+                                      type="submit" 
+                                      disabled={submittingReview || newReview.rating === 0} 
+                                      className="w-full"
+                                    >
+                                      {submittingReview ? (
+                                        <>
+                                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                          Submitting...
+                                        </>
+                                      ) : (
+                                        "Submit Review"
+                                      )}
+                                    </Button>
+                                  </form>
+                                </div>
+                              )}
                             </div>
                           </ScrollArea>
                         </div>

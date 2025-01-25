@@ -1,4 +1,3 @@
-// AddHousingComplex.tsx
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -7,7 +6,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Upload, X, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { AddressInput } from "@/components/AddressInput";
 
 interface AddHousingComplexProps {
   isOpen: boolean;
@@ -26,6 +25,11 @@ export default function AddHousingComplex({ isOpen, onClose, onAdd }: AddHousing
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setStateField] = useState("");
+  const [zip_code, setZipCode] = useState("");
+  const [loading, setLoading] = useState(false);
   const [amenities, setAmenities] = useState<{
     has_swimming_pool: boolean;
     has_gym: boolean;
@@ -75,15 +79,6 @@ export default function AddHousingComplex({ isOpen, onClose, onAdd }: AddHousing
     has_movie_theater: false,
     has_game_room: false,
   });
-  const [loading, setLoading] = useState(false);
-
-  const handleAmenityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, checked } = e.target;
-    setAmenities((prev) => ({
-      ...prev,
-      [name]: checked,
-    }));
-  };
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
@@ -108,30 +103,36 @@ export default function AddHousingComplex({ isOpen, onClose, onAdd }: AddHousing
       });
       return;
     }
+
+    if (!address.trim() || !city.trim() || !state.trim() || !zip_code.trim()) {
+      toast({
+        title: "Error",
+        description: "Address, City, State, and ZIP code are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       let photoUrl = null;
       if (photoFile) {
         const photoName = `housing-complexes/${Date.now()}-${photoFile.name}`;
         const { error: uploadError } = await supabase.storage
-          .from("housing-complex-photos") // Ensure this bucket exists
+          .from("housing-complex-photos")
           .upload(photoName, photoFile, {
             cacheControl: "3600",
             upsert: true,
             contentType: photoFile.type,
           });
 
-        if (uploadError) {
-          throw uploadError;
-        }
+        if (uploadError) throw uploadError;
 
         const { data: publicUrlData, error: urlError } = supabase.storage
           .from("housing-complex-photos")
           .getPublicUrl(photoName);
 
-        if (urlError) {
-          throw urlError;
-        }
+        if (urlError) throw urlError;
 
         photoUrl = publicUrlData.publicUrl;
       }
@@ -142,15 +143,17 @@ export default function AddHousingComplex({ isOpen, onClose, onAdd }: AddHousing
           {
             name: name.trim(),
             photo_url: photoUrl,
+            address: address.trim(),
+            city: city.trim(),
+            state: state.trim(),
+            zip_code: zip_code.trim(),
             ...amenities,
           },
         ])
         .select()
         .single();
 
-      if (insertError) {
-        throw insertError;
-      }
+      if (insertError) throw insertError;
 
       toast({
         title: "Success",
@@ -158,34 +161,7 @@ export default function AddHousingComplex({ isOpen, onClose, onAdd }: AddHousing
       });
 
       onAdd(newComplex);
-      // Reset form
-      setName("");
-      setPhotoFile(null);
-      setAmenities({
-        has_swimming_pool: false,
-        has_gym: false,
-        has_clubhouse: false,
-        has_business_center: false,
-        has_community_room: false,
-        has_gated_entry: false,
-        has_security_cameras: false,
-        has_doorman: false,
-        has_playground: false,
-        has_bbq_area: false,
-        has_dog_park: false,
-        has_tennis_court: false,
-        has_basketball_court: false,
-        has_elevator: false,
-        has_parking_garage: false,
-        has_package_room: false,
-        has_laundry_facility: false,
-        has_bike_storage: false,
-        has_sauna: false,
-        has_spa: false,
-        has_yoga_studio: false,
-        has_movie_theater: false,
-        has_game_room: false,
-      });
+      resetForm();
       onClose();
     } catch (error: any) {
       console.error("Error adding housing complex:", error);
@@ -199,16 +175,50 @@ export default function AddHousingComplex({ isOpen, onClose, onAdd }: AddHousing
     }
   };
 
+  const resetForm = () => {
+    setName("");
+    setPhotoFile(null);
+    setAddress("");
+    setCity("");
+    setStateField("");
+    setZipCode("");
+    setAmenities({
+      has_swimming_pool: false,
+      has_gym: false,
+      has_clubhouse: false,
+      has_business_center: false,
+      has_community_room: false,
+      has_gated_entry: false,
+      has_security_cameras: false,
+      has_doorman: false,
+      has_playground: false,
+      has_bbq_area: false,
+      has_dog_park: false,
+      has_tennis_court: false,
+      has_basketball_court: false,
+      has_elevator: false,
+      has_parking_garage: false,
+      has_package_room: false,
+      has_laundry_facility: false,
+      has_bike_storage: false,
+      has_sauna: false,
+      has_spa: false,
+      has_yoga_studio: false,
+      has_movie_theater: false,
+      has_game_room: false,
+    });
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] h-[90vh]">
         <DialogHeader>
           <DialogTitle>Add New Housing Complex</DialogTitle>
           <DialogDescription>
             Provide the details of the housing complex you want to add.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6 mt-4">
+        <form onSubmit={handleSubmit} className="space-y-6 overflow-y-auto pr-4 pb-6">
           {/* Name */}
           <div className="space-y-2">
             <Label htmlFor="complex_name">Name</Label>
@@ -221,10 +231,22 @@ export default function AddHousingComplex({ isOpen, onClose, onAdd }: AddHousing
             />
           </div>
 
+          {/* Address Input */}
+          <AddressInput
+            address={address}
+            city={city}
+            state={state}
+            zipCode={zip_code}
+            onAddressChange={setAddress}
+            onCityChange={setCity}
+            onStateChange={setStateField}
+            onZipCodeChange={setZipCode}
+          />
+
           {/* Photo Upload */}
           <div className="space-y-2">
             <Label htmlFor="complex_photo">Photo (Optional)</Label>
-            <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg border-muted-foreground/25 hover:border-muted-foreground/50 cursor-pointer transition-colors">
+            <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg border-muted-foreground/25 hover:border-muted-foreground/50 cursor-pointer transition-colors relative">
               <div className="flex flex-col items-center justify-center">
                 {photoFile ? (
                   <span className="text-xs text-muted-foreground">{photoFile.name}</span>
@@ -244,320 +266,27 @@ export default function AddHousingComplex({ isOpen, onClose, onAdd }: AddHousing
             </label>
           </div>
 
-          {/* Amenities */}
+          {/* Amenities Section */}
           <div>
             <Label>Amenities</Label>
             <div className="grid grid-cols-2 gap-4 mt-2">
               {/* Common Amenities */}
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_swimming_pool"
-                  name="has_swimming_pool"
-                  checked={amenities.has_swimming_pool}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_swimming_pool: checked }))
-                  }
-                />
-                <Label htmlFor="has_swimming_pool" className="ml-2">
-                  Swimming Pool
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_gym"
-                  name="has_gym"
-                  checked={amenities.has_gym}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_gym: checked }))
-                  }
-                />
-                <Label htmlFor="has_gym" className="ml-2">
-                  Gym
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_clubhouse"
-                  name="has_clubhouse"
-                  checked={amenities.has_clubhouse}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_clubhouse: checked }))
-                  }
-                />
-                <Label htmlFor="has_clubhouse" className="ml-2">
-                  Clubhouse
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_business_center"
-                  name="has_business_center"
-                  checked={amenities.has_business_center}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_business_center: checked }))
-                  }
-                />
-                <Label htmlFor="has_business_center" className="ml-2">
-                  Business Center
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_community_room"
-                  name="has_community_room"
-                  checked={amenities.has_community_room}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_community_room: checked }))
-                  }
-                />
-                <Label htmlFor="has_community_room" className="ml-2">
-                  Community Room
-                </Label>
-              </div>
-
-              {/* Security Features */}
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_gated_entry"
-                  name="has_gated_entry"
-                  checked={amenities.has_gated_entry}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_gated_entry: checked }))
-                  }
-                />
-                <Label htmlFor="has_gated_entry" className="ml-2">
-                  Gated Entry
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_security_cameras"
-                  name="has_security_cameras"
-                  checked={amenities.has_security_cameras}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_security_cameras: checked }))
-                  }
-                />
-                <Label htmlFor="has_security_cameras" className="ml-2">
-                  Security Cameras
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_doorman"
-                  name="has_doorman"
-                  checked={amenities.has_doorman}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_doorman: checked }))
-                  }
-                />
-                <Label htmlFor="has_doorman" className="ml-2">
-                  Doorman
-                </Label>
-              </div>
-
-              {/* Outdoor Features */}
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_playground"
-                  name="has_playground"
-                  checked={amenities.has_playground}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_playground: checked }))
-                  }
-                />
-                <Label htmlFor="has_playground" className="ml-2">
-                  Playground
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_bbq_area"
-                  name="has_bbq_area"
-                  checked={amenities.has_bbq_area}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_bbq_area: checked }))
-                  }
-                />
-                <Label htmlFor="has_bbq_area" className="ml-2">
-                  BBQ Area
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_dog_park"
-                  name="has_dog_park"
-                  checked={amenities.has_dog_park}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_dog_park: checked }))
-                  }
-                />
-                <Label htmlFor="has_dog_park" className="ml-2">
-                  Dog Park
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_tennis_court"
-                  name="has_tennis_court"
-                  checked={amenities.has_tennis_court}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_tennis_court: checked }))
-                  }
-                />
-                <Label htmlFor="has_tennis_court" className="ml-2">
-                  Tennis Court
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_basketball_court"
-                  name="has_basketball_court"
-                  checked={amenities.has_basketball_court}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_basketball_court: checked }))
-                  }
-                />
-                <Label htmlFor="has_basketball_court" className="ml-2">
-                  Basketball Court
-                </Label>
-              </div>
-
-              {/* Indoor Features */}
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_elevator"
-                  name="has_elevator"
-                  checked={amenities.has_elevator}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_elevator: checked }))
-                  }
-                />
-                <Label htmlFor="has_elevator" className="ml-2">
-                  Elevator
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_parking_garage"
-                  name="has_parking_garage"
-                  checked={amenities.has_parking_garage}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_parking_garage: checked }))
-                  }
-                />
-                <Label htmlFor="has_parking_garage" className="ml-2">
-                  Parking Garage
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_package_room"
-                  name="has_package_room"
-                  checked={amenities.has_package_room}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_package_room: checked }))
-                  }
-                />
-                <Label htmlFor="has_package_room" className="ml-2">
-                  Package Room
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_laundry_facility"
-                  name="has_laundry_facility"
-                  checked={amenities.has_laundry_facility}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_laundry_facility: checked }))
-                  }
-                />
-                <Label htmlFor="has_laundry_facility" className="ml-2">
-                  Laundry Facility
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_bike_storage"
-                  name="has_bike_storage"
-                  checked={amenities.has_bike_storage}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_bike_storage: checked }))
-                  }
-                />
-                <Label htmlFor="has_bike_storage" className="ml-2">
-                  Bike Storage
-                </Label>
-              </div>
-
-              {/* Wellness Features */}
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_sauna"
-                  name="has_sauna"
-                  checked={amenities.has_sauna}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_sauna: checked }))
-                  }
-                />
-                <Label htmlFor="has_sauna" className="ml-2">
-                  Sauna
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_spa"
-                  name="has_spa"
-                  checked={amenities.has_spa}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_spa: checked }))
-                  }
-                />
-                <Label htmlFor="has_spa" className="ml-2">
-                  Spa
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_yoga_studio"
-                  name="has_yoga_studio"
-                  checked={amenities.has_yoga_studio}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_yoga_studio: checked }))
-                  }
-                />
-                <Label htmlFor="has_yoga_studio" className="ml-2">
-                  Yoga Studio
-                </Label>
-              </div>
-
-              {/* Entertainment */}
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_movie_theater"
-                  name="has_movie_theater"
-                  checked={amenities.has_movie_theater}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_movie_theater: checked }))
-                  }
-                />
-                <Label htmlFor="has_movie_theater" className="ml-2">
-                  Movie Theater
-                </Label>
-              </div>
-              <div className="flex items-center">
-                <Checkbox
-                  id="has_game_room"
-                  name="has_game_room"
-                  checked={amenities.has_game_room}
-                  onCheckedChange={(checked) =>
-                    setAmenities((prev) => ({ ...prev, has_game_room: checked }))
-                  }
-                />
-                <Label htmlFor="has_game_room" className="ml-2">
-                  Game Room
-                </Label>
-              </div>
+              {Object.entries(amenities).map(([key, value]) => (
+                <div key={key} className="flex items-center">
+                  <Checkbox
+                    id={key}
+                    checked={value}
+                    onCheckedChange={(checked) =>
+                      setAmenities((prev) => ({ ...prev, [key]: checked }))
+                    }
+                  />
+                  <Label htmlFor={key} className="ml-2">
+                    {key.split('_').map(word => 
+                      word.charAt(0).toUpperCase() + word.slice(1)
+                    ).join(' ').replace('Has ', '')}
+                  </Label>
+                </div>
+              ))}
             </div>
           </div>
 
