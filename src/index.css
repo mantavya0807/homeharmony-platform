@@ -73,4 +73,7 @@
   body {
     @apply bg-background text-foreground;
   }
-} 
+  .hide-transparent {
+    @apply bg-white border border-gray-200 dark:bg-slate-950 dark:border-slate-800;
+  }
+}

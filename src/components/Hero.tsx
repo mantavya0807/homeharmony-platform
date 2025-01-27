@@ -2,7 +2,8 @@ import { SearchBar } from "./SearchBar";
 
 export function Hero() {
   return (
-    <div className="relative h-screen flex items-center justify-center">
+    // Changed from h-screen to h-full to work with parent container
+    <div className="relative h-full flex items-center justify-center">
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{

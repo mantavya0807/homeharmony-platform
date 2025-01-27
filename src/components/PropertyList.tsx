@@ -6,20 +6,25 @@ import { Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 
 export function PropertyList({ location, filters }) {
-  const [userRole, setUserRole] = useState(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   // Get user role on component mount
   useEffect(() => {
     const getUserRole = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error } = await supabase.auth.getUser();
       if (user) {
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', user.id)
           .single();
-        
-        setUserRole(profile?.role);
+
+        if (profileError) {
+          console.error(profileError);
+          return;
+        }
+
+        setUserRole(profile?.role || null);
       }
     };
 
@@ -41,26 +46,31 @@ export function PropertyList({ location, filters }) {
         );
       }
 
+      // Apply property type filter
+      if (filters.propertyType && filters.propertyType !== 'any') {
+        query = query.eq("property_type", filters.propertyType);
+      }
+
       // Apply bed filter
-      if (filters?.beds && filters.beds !== 'any') {
+      if (filters.beds && filters.beds !== 'any') {
         query = query.gte('bedrooms', parseInt(filters.beds));
       }
 
       // Apply bath filter
-      if (filters?.baths && filters.baths !== 'any') {
+      if (filters.baths && filters.baths !== 'any') {
         query = query.gte('bathrooms', parseInt(filters.baths));
       }
 
       // Apply square feet filter
-      if (filters?.minSquareFeet) {
+      if (filters.minSquareFeet) {
         query = query.gte('square_feet', parseInt(filters.minSquareFeet));
       }
-      if (filters?.maxSquareFeet) {
+      if (filters.maxSquareFeet) {
         query = query.lte('square_feet', parseInt(filters.maxSquareFeet));
       }
 
       // Apply price range filter
-      if (filters?.priceRange) {
+      if (filters.priceRange) {
         const [minPrice, maxPrice] = filters.priceRange;
         query = query
           .gte('price', minPrice)
@@ -70,14 +80,7 @@ export function PropertyList({ location, filters }) {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Double-check the filtering on the client side for price
-      const filteredData = data.filter(property => {
-        const price = property.price;
-        const [minPrice, maxPrice] = filters.priceRange;
-        return price >= minPrice && price <= maxPrice;
-      });
-
-      return filteredData;
+      return data;
     },
   });
 
@@ -99,7 +102,7 @@ export function PropertyList({ location, filters }) {
       </div>
     );
   }
-  console.log(userRole);
+
   // Choose which PropertyCard component to use based on role
   const CardComponent = userRole === "seller" ? SellerPropertyCard : PropertyCard;
 

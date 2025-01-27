@@ -22,11 +22,17 @@ import {
   ArrowLeft,
   Loader2,
 } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
 import { useSavedStatus } from "@/hooks/useSavedStatus"; // Import the custom hook
 import { cn } from "@/lib/utils"; // Import cn utility for class names
 
+// Define the HousingComplex interface
+interface HousingComplex {
+  id: string;
+  name: string;
+}
+
+// Updated Property interface to include housing_complex
 interface Property {
   id: string;
   title: string;
@@ -47,13 +53,58 @@ interface Property {
     id: string;
     full_name: string;
   };
-  google_maps_link?: string; // New field
+  google_maps_link?: string;
+  housing_complex_id: string | null;
+  housing_complex?: HousingComplex;
 }
+
+// WalkscoreWidget Component
+const WalkscoreWidget: React.FC<{ address: string }> = ({ address }) => {
+  useEffect(() => {
+    // Set the global variables required by the Walkscore script
+    (window as any).ws_wsid = 'g6a58aea38a124a729e3e228de2412943';
+    (window as any).ws_address = address;
+    (window as any).ws_format = 'square';
+    (window as any).ws_width = '500';
+    (window as any).ws_height = '500';
+
+    // Create the script element
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.src = 'https://www.walkscore.com/tile/show-walkscore-tile.php'; // Changed to HTTPS for security
+    script.async = true;
+
+    // Append the script to the walkscore-tile div
+    const tileDiv = document.getElementById('ws-walkscore-tile');
+    if (tileDiv) {
+      tileDiv.innerHTML = ''; // Clear previous content
+      tileDiv.appendChild(script);
+    }
+
+    // Cleanup: remove the script when component unmounts or address changes
+    return () => {
+      if (tileDiv) {
+        tileDiv.innerHTML = '';
+      }
+    };
+  }, [address]);
+
+  return (
+    <>
+      <style type='text/css'>
+        {`
+          #ws-walkscore-tile { position: relative; text-align: left; }
+          #ws-walkscore-tile * { float: none; }
+        `}
+      </style>
+      <div id='ws-walkscore-tile'></div>
+    </>
+  );
+};
 
 export default function PropertyDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { toast } = useToast();
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +124,10 @@ export default function PropertyDetails() {
               seller:seller_id (
                 id,
                 full_name
+              ),
+              housing_complex:housing_complex_id (
+                id,
+                name
               )
             `
           )
@@ -81,9 +136,9 @@ export default function PropertyDetails() {
 
         if (error) throw error;
         setProperty(data);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error fetching property:", err);
-        setError("Failed to load property details");
+        setError(err.message || "Failed to load property details");
       } finally {
         setLoading(false);
       }
@@ -101,11 +156,6 @@ export default function PropertyDetails() {
       if (authError) throw authError;
 
       if (!user) {
-        toast({
-          title: "Authentication required",
-          description: "Please sign in to contact the agent",
-          variant: "destructive",
-        });
         navigate("/auth");
         return;
       }
@@ -123,8 +173,8 @@ export default function PropertyDetails() {
       if (chatError) throw chatError;
 
       const existingChat = existingChats?.find(chat =>
-        chat.chat_participants.some(p => p.user_id === property.seller_id) &&
-        chat.chat_participants.some(p => p.user_id === user.id)
+        chat.chat_participants.some((p: any) => p.user_id === property.seller_id) &&
+        chat.chat_participants.some((p: any) => p.user_id === user.id)
       );
 
       let chatId;
@@ -171,11 +221,6 @@ export default function PropertyDetails() {
       navigate('/chat', { state: { chatId } });
     } catch (error: any) {
       console.error('Error contacting agent:', error);
-      toast({
-        title: "Error",
-        description: "Failed to initiate chat with the agent. Please try again.",
-        variant: "destructive",
-      });
     } finally {
       setContactLoading(false);
     }
@@ -184,19 +229,8 @@ export default function PropertyDetails() {
   const handleSaveClick = async () => {
     try {
       await toggleSave();
-      toast({
-        title: isSaved ? "Property removed from saved list" : "Property saved!",
-        description: isSaved
-          ? "You can always save it again later."
-          : "You can view it in your saved properties.",
-        variant: isSaved ? "default" : "success",
-      });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "Failed to update saved status.",
-        variant: "destructive",
-      });
+      console.error("Error saving property:", error);
     }
   };
 
@@ -219,6 +253,9 @@ export default function PropertyDetails() {
       </div>
     );
   }
+
+  // Construct full address for Walkscore
+  const fullAddress = `${property.address}, ${property.city}, ${property.state} ${property.zip_code}`;
 
   return (
     <div className="min-h-screen bg-background">
@@ -249,6 +286,7 @@ export default function PropertyDetails() {
         <div className="grid gap-8 md:grid-cols-[2fr,1fr]">
           {/* Main Content */}
           <div className="space-y-6">
+            {/* Property Title and Address */}
             <div>
               <h1 className="text-3xl font-bold mb-2">{property.title}</h1>
               <div className="flex items-center gap-2 text-muted-foreground">
@@ -258,8 +296,16 @@ export default function PropertyDetails() {
                   {property.zip_code}
                 </span>
               </div>
+              {/* Display Housing Complex Name if available */}
+              {property.housing_complex?.name && (
+                <div className="flex items-center gap-2 text-muted-foreground mt-1">
+                  <Home className="h-4 w-4" />
+                  <span>Complex: {property.housing_complex.name}</span>
+                </div>
+              )}
             </div>
 
+            {/* Property Features */}
             <div className="grid grid-cols-4 gap-4">
               <Card>
                 <CardContent className="pt-6">
@@ -295,6 +341,7 @@ export default function PropertyDetails() {
               </Card>
             </div>
 
+            {/* Property Description */}
             <Card>
               <CardHeader>
                 <CardTitle>Description</CardTitle>
@@ -304,44 +351,53 @@ export default function PropertyDetails() {
               </CardContent>
             </Card>
 
+            {/* Walkscore Widget */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Walkscore</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <WalkscoreWidget address={fullAddress} />
+              </CardContent>
+            </Card>
+
             {/* Google Maps Section */}
-            {property.google_maps_link && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Location</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="aspect-video relative rounded-lg overflow-hidden">
-                    <iframe
-                      className="w-full h-[300px] border-0"
-                      loading="lazy"
-                      referrerPolicy="no-referrer-when-downgrade"
-                      src={`https://www.google.com/maps/embed/v1/place?key=YOUR_GOOGLE_MAPS_API_KEY&q=${encodeURIComponent(
-                        `${property.address}, ${property.city}, ${property.state} ${property.zip_code}`
-                      )}&zoom=15`}
-                      allowFullScreen
-                    ></iframe>
-                  </div>
-                  <div className="mt-4">
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                        `${property.address}, ${property.city}, ${property.state} ${property.zip_code}`
-                      )}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-                    >
-                      <MapPin className="h-4 w-4" />
-                      <span>Open in Google Maps</span>
-                    </a>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Location</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="aspect-video relative rounded-lg overflow-hidden">
+                  <iframe
+                    className="w-full h-[300px] border-0"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I&q=${encodeURIComponent(
+                      fullAddress
+                    )}&zoom=15`}
+                    allowFullScreen
+                  ></iframe>
+                </div>
+                <div className="mt-4">
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                      fullAddress
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    <MapPin className="h-4 w-4" />
+                    <span>Open in Google Maps</span>
+                  </a>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {/* Price Information */}
             <Card>
               <CardHeader>
                 <CardTitle>Price</CardTitle>
@@ -357,56 +413,57 @@ export default function PropertyDetails() {
               </CardContent>
             </Card>
 
+            {/* Agent Details */}
             <Card>
-            <CardHeader>
-  <CardTitle>Agent Details</CardTitle>
-</CardHeader>
-<CardContent className="pt-6 space-y-4">
-  <p className="text-sm text-muted-foreground">
-    Listed by: {property.seller?.full_name || "Unknown Agent"}
-  </p>
-  <motion.button
-    whileHover={{ scale: 1.05 }}
-    whileTap={{ scale: 0.95 }}
-    className={cn(
-      "w-full py-3 px-4 rounded-lg text-white font-semibold flex items-center justify-center transition-colors",
-      "bg-primary hover:bg-primary-dark"
-    )}
-    onClick={handleContactAgent}
-    disabled={contactLoading}
-  >
-    {contactLoading ? (
-      <>
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        Connecting...
-      </>
-    ) : (
-      "Contact Agent"
-    )}
-  </motion.button>
-</CardContent>
-</Card>
+              <CardHeader>
+                <CardTitle>Agent Details</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Listed by: {property.seller?.full_name || "Unknown Agent"}
+                </p>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className={cn(
+                    "w-full py-3 px-4 rounded-lg text-white font-semibold flex items-center justify-center transition-colors",
+                    "bg-primary hover:bg-primary-dark"
+                  )}
+                  onClick={handleContactAgent}
+                  disabled={contactLoading}
+                >
+                  {contactLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    "Contact Agent"
+                  )}
+                </motion.button>
+              </CardContent>
+            </Card>
 
-{/* Save Property Button */}
-<motion.button
-  whileHover={{ scale: 1.05 }}
-  whileTap={{ scale: 0.95 }}
-  className={cn(
-    "w-full py-3 px-4 rounded-lg text-white font-semibold flex items-center justify-center transition-colors",
-    isSaved ? "bg-red-500 hover:bg-red-600" : "bg-primary hover:bg-primary-dark"
-  )}
-  onClick={handleSaveClick}
-  disabled={savingLoading}
->
-  {savingLoading ? (
-    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-  ) : isSaved ? (
-    "Saved"
-  ) : (
-    "Save Property"
-  )}
-</motion.button>
-         </div>
+            {/* Save Property Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className={cn(
+                "w-full py-3 px-4 rounded-lg text-white font-semibold flex items-center justify-center transition-colors",
+                isSaved ? "bg-red-500 hover:bg-red-600" : "bg-primary hover:bg-primary-dark"
+              )}
+              onClick={handleSaveClick}
+              disabled={savingLoading}
+            >
+              {savingLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : isSaved ? (
+                "Saved"
+              ) : (
+                "Save Property"
+              )}
+            </motion.button>
+          </div>
         </div>
       </div>
     </div>

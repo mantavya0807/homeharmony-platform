@@ -7,18 +7,18 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 
-type ViewType = "role" | "login" | "register";
+type ViewType = "role" | "login" | "register" | "forgot-password" | "update-password";
 
 export default function Auth() {
   const navigate = useNavigate();
   const location = useLocation();
-  // Set login as default view if no initialView specified
   const initialView = (location.state?.initialView || "login") as ViewType;
 
   const [error, setError] = useState<string>("");
+  const [success, setSuccess] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<ViewType>(initialView);
   const [role, setRole] = useState<"buyer" | "seller">("buyer");
@@ -28,20 +28,36 @@ export default function Auth() {
   const [confirmEmail, setConfirmEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
+  // Reset states when switching views
   useEffect(() => {
-    // Check if user is already logged in
+    setError("");
+    setSuccess("");
+    setEmail("");
+    setPassword("");
+    setShowPassword(false);
+  }, [view]);
+
+  // Check for password reset token
+  useEffect(() => {
+    const hash = location.hash;
+    if (hash && hash.includes('type=recovery')) {
+      setView('update-password');
+    }
+  }, [location]);
+
+  // Check if user is already logged in
+  useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        // Get user role
         const { data: profile } = await supabase
           .from("profiles")
           .select("role")
           .eq("id", session.user.id)
           .single();
         
-        // Redirect based on role
         if (profile?.role === "seller") {
           navigate("/seller-dashboard");
         } else {
@@ -53,22 +69,13 @@ export default function Auth() {
     checkAuth();
   }, [navigate]);
 
-  useEffect(() => {
-    // Update view when initialView changes
-    if (location.state?.initialView) {
-      setView(location.state.initialView);
-    }
-  }, [location.state?.initialView]);
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
     try {
-      // Clear any existing session first
       await supabase.auth.signOut();
-
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -84,13 +91,62 @@ export default function Auth() {
 
       if (profileError) throw profileError;
 
-      // Navigate based on role
-      if (profile.role === "seller") {
-        navigate("/seller-dashboard");
-      } else {
-        navigate("/dashboard");
+      navigate(profile.role === "seller" ? "/seller-dashboard" : "/dashboard");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      if (!email || !email.includes('@')) {
+        throw new Error('Please enter a valid email address');
       }
-    } catch (err) {
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: "http://localhost:8080/auth?view=reset-password",
+      });
+
+      if (error) throw error;
+
+      setSuccess("If an account exists with this email, you will receive password reset instructions shortly.");
+      setEmail("");
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      if (password.length < 6) {
+        throw new Error('Password must be at least 6 characters long');
+      }
+
+      const { error } = await supabase.auth.updateUser({ 
+        password: password 
+      });
+
+      if (error) throw error;
+
+      setSuccess("Password updated successfully! Redirecting to login...");
+      setTimeout(() => {
+        setView("login");
+      }, 2000);
+    } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
@@ -103,7 +159,6 @@ export default function Auth() {
     setError("");
 
     try {
-      // Validation
       if (!fullName.trim()) {
         throw new Error("Full name is required");
       }
@@ -114,10 +169,8 @@ export default function Auth() {
         throw new Error("Password must be at least 6 characters");
       }
 
-      // Clear any existing session first
       await supabase.auth.signOut();
 
-      // Create new user
       const { data: { user }, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -132,7 +185,6 @@ export default function Auth() {
       if (signUpError) throw signUpError;
       if (!user) throw new Error("Failed to create user");
 
-      // Create profile
       const { error: profileError } = await supabase
         .from("profiles")
         .insert([
@@ -148,19 +200,175 @@ export default function Auth() {
 
       if (profileError) throw profileError;
 
-      setError("Success! Please check your email to confirm your account.");
+      setSuccess("Success! Please check your email to confirm your account.");
       
-      // Clear form
       setEmail("");
       setConfirmEmail("");
       setPassword("");
       setFullName("");
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
+
+  const renderLogin = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Login to your account</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+          <Button 
+            type="button" 
+            variant="link" 
+            className="p-0 h-auto font-normal"
+            onClick={() => setView("forgot-password")}
+          >
+            Forgot your password?
+          </Button>
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Logging in...
+              </>
+            ) : (
+              "Login"
+            )}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+
+  const renderRegister = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Create {role} Account</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleRegister} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="full-name">Full Name</Label>
+            <Input
+              id="full-name"
+              placeholder="John Doe"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="register-email">Email</Label>
+            <Input
+              id="register-email"
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirm-email">Confirm Email</Label>
+            <Input
+              id="confirm-email"
+              type="email"
+              placeholder="your@email.com"
+              value={confirmEmail}
+              onChange={(e) => setConfirmEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="register-password">Password</Label>
+            <div className="relative">
+              <Input
+                id="register-password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            Registering as: <span className="font-semibold">{role}</span>
+          </div>
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating account...
+              </>
+            ) : (
+              `Create ${role} account`
+            )}
+          </Button>
+          <Button 
+            type="button" 
+            variant="outline" 
+            className="w-full" 
+            onClick={() => setView("role")}
+          >
+            Change Role
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
 
   const renderRoleSelection = () => (
     <Card>
@@ -194,148 +402,134 @@ export default function Auth() {
     </Card>
   );
 
-  const renderAuthForm = () => (
-    <Tabs defaultValue={view} className="w-full" onValueChange={(v) => setView(v as ViewType)}>
-      <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="login">Login</TabsTrigger>
-        <TabsTrigger value="register">Register as {role}</TabsTrigger>
-      </TabsList>
+  const renderForgotPassword = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Reset Password</CardTitle>
+        <CardDescription>
+          Enter your email address and we'll send you instructions to reset your password.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleForgotPassword} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="reset-email">Email</Label>
+            <Input
+              id="reset-email"
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="flex gap-4">
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="w-full"
+              onClick={() => setView("login")}
+            >
+              Back to Login
+            </Button>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                "Send Instructions"
+              )}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  );
 
-      <TabsContent value="login">
-        <Card>
-          <CardHeader>
-            <CardTitle>Login to your account</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Logging in...
-                  </>
-                ) : (
-                  "Login"
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value="register">
-        <Card>
-          <CardHeader>
-            <CardTitle>Create {role} Account</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleRegister} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="full-name">Full Name</Label>
-                <Input
-                  id="full-name"
-                  placeholder="John Doe"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="register-email">Email</Label>
-                <Input
-                  id="register-email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirm-email">Confirm Email</Label>
-                <Input
-                  id="confirm-email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={confirmEmail}
-                  onChange={(e) => setConfirmEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="register-password">Password</Label>
-                <Input
-                  id="register-password"
-                  type="password"
-                  value={password}
+  const renderUpdatePassword = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Update Password</CardTitle>
+        <CardDescription>
+          Please enter your new password below.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleUpdatePassword} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="new-password">New Password</Label>
+            <div className="relative">
+              <Input
+                id="new-password"
+                type={showPassword ? "text" : "password"}
+                value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
+                  placeholder="Enter new password"
                 />
-              </div>
-              <div className="text-sm text-muted-foreground">
-                Registering as: <span className="font-semibold">{role}</span>
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating account...
-                  </>
-                ) : (
-                  `Create ${role} account`
-                )}
-              </Button>
-              {view !== "role" && (
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  className="w-full" 
-                  onClick={() => setView("role")}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
                 >
-                  Change Role
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </Button>
+              </div>
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                "Update Password"
               )}
-            </form>
-          </CardContent>
-        </Card>
-      </TabsContent>
-    </Tabs>
-  );
-
-  return (
-    <div className="container max-w-md mx-auto mt-12 p-4">
-      <h1 className="text-2xl font-bold mb-6 text-center">Welcome to HomeHarmony</h1>
-      {error && (
-        <Alert 
-          variant={error.includes("check your email") ? "default" : "destructive"} 
-          className="mb-4"
-        >
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      {view === "role" ? renderRoleSelection() : renderAuthForm()}
-    </div>
-  );
-}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    );
+    
+    return (
+      <div className="container max-w-md mx-auto mt-12 p-4">
+        <h1 className="text-2xl font-bold mb-6 text-center">Welcome to HomeHarmony</h1>
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {success && (
+          <Alert className="mb-4">
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        )}
+        {view === "forgot-password" ? (
+          renderForgotPassword()
+        ) : view === "update-password" ? (
+          renderUpdatePassword()
+        ) : view === "role" ? (
+          renderRoleSelection()
+        ) : (
+          <Tabs defaultValue={view} className="w-full" onValueChange={(v) => setView(v as ViewType)}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="login">Login</TabsTrigger>
+              <TabsTrigger value="register">Register as {role}</TabsTrigger>
+            </TabsList>
+    
+            <TabsContent value="login">{renderLogin()}</TabsContent>
+            <TabsContent value="register">{renderRegister()}</TabsContent>
+          </Tabs>
+        )}
+      </div>
+    );
+    }

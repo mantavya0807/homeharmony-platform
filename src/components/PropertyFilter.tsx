@@ -107,7 +107,7 @@ export function PropertyFilters({ onFiltersChange }: PropertyFiltersProps) {
               <SelectTrigger>
                 <SelectValue placeholder="Any Type" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-white border border-gray-200 dark:bg-slate-950 dark:border-slate-800">
                 <SelectItem value="any">Any Type</SelectItem>
                 <SelectItem value="house">House</SelectItem>
                 <SelectItem value="apartment">Apartment</SelectItem>
@@ -132,7 +132,7 @@ export function PropertyFilters({ onFiltersChange }: PropertyFiltersProps) {
               <SelectTrigger>
                 <SelectValue placeholder="Any" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-white border border-gray-200 dark:bg-slate-950 dark:border-slate-800">
                 <SelectItem value="any">Any</SelectItem>
                 <SelectItem value="1">1+ Beds</SelectItem>
                 <SelectItem value="2">2+ Beds</SelectItem>
@@ -158,7 +158,7 @@ export function PropertyFilters({ onFiltersChange }: PropertyFiltersProps) {
               <SelectTrigger>
                 <SelectValue placeholder="Any" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-white border border-gray-200 dark:bg-slate-950 dark:border-slate-800">
                 <SelectItem value="any">Any</SelectItem>
                 <SelectItem value="1">1+ Baths</SelectItem>
                 <SelectItem value="2">2+ Baths</SelectItem>
