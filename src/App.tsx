@@ -17,6 +17,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Loader2 } from "lucide-react";
 import HousingComplexes from "./components/HousingComplexes";
 import SavedProperties from "./pages/SavedProperties";
+import PaymentSuccess from "./pages/PaymentSuccess";
 
 const queryClient = new QueryClient();
 
@@ -142,6 +143,16 @@ const App = () => {
                       <Navigate to="/auth" />
                     ) : (
                       <PropertyDetails />
+                    )
+                  }
+                />
+                <Route 
+                  path="/payment/success" 
+                  element={
+                    !session ? (
+                      <Navigate to="/auth" />
+                    ) : (
+                      <PaymentSuccess />
                     )
                   }
                 />

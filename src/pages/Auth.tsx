@@ -104,18 +104,19 @@ export default function Auth() {
     setLoading(true);
     setError("");
     setSuccess("");
-
+  
     try {
       if (!email || !email.includes('@')) {
         throw new Error('Please enter a valid email address');
       }
-
+  
+      // Update this to match your configured redirect URL exactly
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: "http://localhost:8080/auth?view=reset-password",
+        redirectTo: `${window.location.origin}/auth#type=recovery`
       });
-
+  
       if (error) throw error;
-
+  
       setSuccess("If an account exists with this email, you will receive password reset instructions shortly.");
       setEmail("");
     } catch (err: any) {
@@ -125,7 +126,6 @@ export default function Auth() {
       setLoading(false);
     }
   };
-
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);

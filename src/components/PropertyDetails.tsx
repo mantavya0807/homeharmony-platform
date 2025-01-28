@@ -25,6 +25,7 @@ import {
 import { motion } from "framer-motion";
 import { useSavedStatus } from "@/hooks/useSavedStatus"; // Import the custom hook
 import { cn } from "@/lib/utils"; // Import cn utility for class names
+import StripePayment from "@/components/StripePayment";
 
 // Define the HousingComplex interface
 interface HousingComplex {
@@ -463,6 +464,16 @@ export default function PropertyDetails() {
                 "Save Property"
               )}
             </motion.button>
+
+            {/* Add Stripe Payment Component */}
+            {property && (
+              <StripePayment
+                propertyId={property.id}
+                propertyTitle={property.title}
+                price={property.price}
+                sellerId={property.seller_id}
+              />
+            )}
           </div>
         </div>
       </div>
