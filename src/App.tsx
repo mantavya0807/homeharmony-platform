@@ -17,11 +17,9 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Loader2 } from "lucide-react";
 import HousingComplexes from "./components/HousingComplexes";
 import SavedProperties from "./pages/SavedProperties";
-import PaymentSuccess from "./pages/PaymentSuccess";
-
 const queryClient = new QueryClient();
 
-const App = () => {
+export default function App() {
   const [session, setSession] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -146,16 +144,6 @@ const App = () => {
                     )
                   }
                 />
-                <Route 
-                  path="/payment/success" 
-                  element={
-                    !session ? (
-                      <Navigate to="/auth" />
-                    ) : (
-                      <PaymentSuccess />
-                    )
-                  }
-                />
               </Routes>
             </div>
           </BrowserRouter>
@@ -163,6 +151,4 @@ const App = () => {
       </ThemeProvider>
     </QueryClientProvider>
   );
-};
-
-export default App;
+}

@@ -19,6 +19,8 @@ interface PropertyCardProps {
   baths: number;
   sqft: number;
   imageUrl: string;
+  sublease_from?: string;  // Add these new props
+  sublease_to?: string;    // Add these new props
 }
 
 export function PropertyCard({
@@ -30,6 +32,8 @@ export function PropertyCard({
   baths,
   sqft,
   imageUrl,
+  sublease_from,
+  sublease_to,
 }: PropertyCardProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -120,6 +124,19 @@ export function PropertyCard({
     }
   };
 
+  // Calculate sublease duration in months
+  const getSubLeaseDuration = () => {
+    if (!sublease_from || !sublease_to) return null;
+    
+    const start = new Date(sublease_from);
+    const end = new Date(sublease_to);
+    const months = (end.getFullYear() - start.getFullYear()) * 12 + 
+                  (end.getMonth() - start.getMonth());
+    return months;
+  };
+
+  const subleaseDuration = getSubLeaseDuration();
+
   return (
     <Card 
       className="overflow-hidden transition-all duration-300 hover:shadow-lg animate-fadeIn cursor-pointer group relative"
@@ -166,6 +183,17 @@ export function PropertyCard({
           <MapPin size={16} />
           <span className="text-sm line-clamp-1">{location}</span>
         </div>
+        {/* Sublease Duration */}
+        {subleaseDuration && (
+          <div className="mb-2">
+            <Badge variant="secondary">
+              {subleaseDuration} month{subleaseDuration !== 1 ? 's' : ''} sublease
+            </Badge>
+            <p className="text-xs text-muted-foreground mt-1">
+              {new Date(sublease_from).toLocaleDateString()} - {new Date(sublease_to).toLocaleDateString()}
+            </p>
+          </div>
+        )}
       </CardContent>
       <CardFooter className="grid grid-cols-3 gap-4 p-4 border-t">
         <div className="flex items-center gap-1">

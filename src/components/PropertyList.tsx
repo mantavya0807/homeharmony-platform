@@ -120,6 +120,8 @@ export function PropertyList({ location, filters }) {
           sqft={property.square_feet}
           imageUrl={property.images?.[0] || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"}
           userRole={userRole}
+          sublease_from={property.sublease_from}
+          sublease_to={property.sublease_to}
         />
       ))}
     </div>

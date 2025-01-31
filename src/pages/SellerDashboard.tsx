@@ -1,3 +1,5 @@
+// src/pages/SellerDashboard.tsx
+
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,20 +21,21 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { PropertyCard } from "@/components/PropertyCard1";
 import { EditPropertyDialog } from "@/pages/EditPropertyDialog";
 import AddHousingComplex from "@/components/AddHousingComplex";
-
-// Import the new AddressInput component
 import { AddressInput } from "@/components/AddressInput";
+import { performOCR } from "@/utils/ocr";
 
 import type { Database } from "@/integrations/supabase/types";
 
 type Property = Database["public"]["Tables"]["properties"]["Row"];
 type HousingComplex = Database["public"]["Tables"]["housing_complexes"]["Row"];
 
+type PropertyType = "house" | "apartment" | "condo" | "townhouse";
+
 interface PropertyForm {
   title: string;
   description: string;
   price: string;
-  property_type: "house" | "apartment" | "condo" | "townhouse";
+  property_type: PropertyType;
   bedrooms: string;
   bathrooms: string;
   square_feet: string;
@@ -41,6 +44,9 @@ interface PropertyForm {
   state: string;
   zip_code: string;
   housing_complex_id?: string;
+  sublease_from?: string;
+  sublease_to?: string;
+  verification_document?: File | null;
 }
 
 interface MediaFile {
@@ -76,11 +82,15 @@ export default function SellerDashboard() {
     square_feet: "",
     property_type: "house",
     housing_complex_id: "",
+    sublease_from: "",
+    sublease_to: "",
+    verification_document: null,
   });
 
   useEffect(() => {
     fetchProperties();
     fetchHousingComplexes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   const fetchProperties = async () => {
@@ -114,8 +124,9 @@ export default function SellerDashboard() {
 
       if (error) throw error;
       setProperties(data || []);
+      console.log("Fetched Properties:", data);
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error fetching properties:", error);
       toast({
         title: "Error",
         description: "Failed to load properties",
@@ -135,8 +146,9 @@ export default function SellerDashboard() {
 
       if (error) throw error;
       setHousingComplexes(data || []);
+      console.log("Fetched Housing Complexes:", data);
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error fetching housing complexes:", error);
       toast({
         title: "Error",
         description: "Failed to load housing complexes",
@@ -170,13 +182,16 @@ export default function SellerDashboard() {
             type,
           },
         ]);
+        console.log(`Added media file: ${file.name}`);
       };
       reader.readAsDataURL(file);
     });
   };
 
   const removeMedia = (index: number) => {
+    const removed = mediaFiles[index];
     setMediaFiles((prev) => prev.filter((_, i) => i !== index));
+    console.log(`Removed media file: ${removed.file.name}`);
   };
 
   const uploadMedia = async (propertyId: string) => {
@@ -185,16 +200,16 @@ export default function SellerDashboard() {
         const fileExt = mediaFile.file.name.split(".").pop();
         const fileName = `${propertyId}/${Date.now()}-${index}.${fileExt}`;
 
-        // Remove existing files in that folder to avoid clutter
+        // Remove any existing files for this property to avoid clutter
         const { data: existingFiles } = await supabase.storage
           .from("property-media")
           .list(`${propertyId}`);
-
         if (existingFiles?.length) {
           const filesToRemove = existingFiles.map(
             (file) => `${propertyId}/${file.name}`
           );
           await supabase.storage.from("property-media").remove(filesToRemove);
+          console.log("Removed existing media files:", filesToRemove);
         }
 
         // Upload new file
@@ -204,21 +219,148 @@ export default function SellerDashboard() {
             cacheControl: "3600",
             upsert: true,
           });
-
         if (uploadError) throw uploadError;
 
-        const { data } = supabase.storage
-          .from("property-media")
-          .getPublicUrl(fileName);
+        const { data } = supabase.storage.from("property-media").getPublicUrl(fileName);
 
+        console.log("Uploaded media file:", fileName);
         return data.publicUrl;
       } catch (error) {
-        console.error("Error:", error);
+        console.error("Error uploading media:", error);
         throw error;
       }
     });
 
     return await Promise.all(uploadPromises);
+  };
+
+  /**
+   * handleVerificationUpload
+   * Uploads the verification document and updates the property with verification details.
+   */
+  const handleVerificationUpload = async (
+    propertyId: string,
+    file: File,
+    propertyDetails: {
+      address: string;
+      city: string;
+      state: string;
+      zip_code: string;
+      price: string;
+      title: string;
+    }
+  ) => {
+    try {
+      if (!file) {
+        throw new Error("No verification file provided");
+      }
+
+      // Validate file size (max 5MB)
+      const maxSize = 5 * 1024 * 1024;
+      if (file.size > maxSize) {
+        throw new Error("File size must be less than 5MB");
+      }
+
+      // Validate file type
+      const allowedTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/jpg",
+        "application/pdf",
+      ];
+      if (!allowedTypes.includes(file.type)) {
+        throw new Error(
+          "File type not supported. Please upload a JPEG, PNG, or PDF file."
+        );
+      }
+
+      // Perform OCR / Document Verification
+      console.log("Starting verification document upload for property:", propertyId);
+      const ocrResult = await performOCR(file, propertyDetails);
+
+      // Log result for debugging
+      console.log("OCR Result:", ocrResult);
+
+      if (!ocrResult.success) {
+        throw new Error(ocrResult.error || "Document verification failed");
+      }
+
+      // Optionally, display the matches found
+      if (ocrResult.matches && ocrResult.matches.length > 0) {
+        toast({
+          title: "Document Analysis",
+          description: `Found matches for: ${ocrResult.matches.join(", ")}`,
+        });
+      }
+
+      // Create a unique file path
+      const timestamp = Date.now();
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const filePath = `${propertyId}/${timestamp}-${sanitizedFileName}`;
+
+      // Upload the file to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from("property-verifications")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          contentType: file.type,
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw new Error(`Failed to upload file: ${uploadError.message}`);
+      }
+
+      // Get the public URL
+      const { data: publicUrlData } = supabase.storage
+        .from("property-verifications")
+        .getPublicUrl(filePath);
+
+      if (!publicUrlData?.publicUrl) {
+        throw new Error("Failed to get public URL for uploaded file");
+      }
+
+      // Update property with verification status
+      const { error: updateError } = await supabase
+        .from("properties")
+        .update({
+          is_verified: ocrResult.is_verified,
+          verification_document_url: publicUrlData.publicUrl,
+          verified_at: ocrResult.is_verified ? new Date().toISOString() : null,
+        })
+        .eq("id", propertyId);
+
+      if (updateError) {
+        throw new Error("Failed to update property verification status");
+      }
+
+      toast({
+        title: ocrResult.is_verified
+          ? "Verification Successful"
+          : "Verification Pending",
+        description: ocrResult.is_verified
+          ? `Document verified (Score: ${ocrResult.score?.toFixed(
+              2
+            )}). Matches: ${ocrResult.matches?.length}`
+          : "Not enough matching details found for automatic verification.",
+        variant: ocrResult.is_verified ? "default" : "destructive",
+      });
+
+      return {
+        success: true,
+        is_verified: ocrResult.is_verified,
+        documentUrl: publicUrlData.publicUrl,
+        matches: ocrResult.matches,
+      };
+    } catch (error: any) {
+      console.error("Verification Error:", error);
+      toast({
+        title: "Verification Failed",
+        description: error.message || "Failed to verify property.",
+        variant: "destructive",
+      });
+      throw error;
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -232,17 +374,56 @@ export default function SellerDashboard() {
       } = await supabase.auth.getSession();
       if (!session?.user) throw new Error("Not authenticated");
 
+      const {
+        title,
+        description,
+        price,
+        property_type,
+        bedrooms,
+        bathrooms,
+        square_feet,
+        address,
+        city,
+        state,
+        zip_code,
+        housing_complex_id,
+        sublease_from,
+        sublease_to,
+        verification_document,
+      } = newProperty;
+
+      // 1. Insert the property (initially unverified)
+      console.log("Creating new property in Supabase...");
       const { data, error } = await supabase
         .from("properties")
         .insert([
           {
-            ...newProperty,
-            price: parseFloat(newProperty.price),
-            bedrooms: parseInt(newProperty.bedrooms),
-            bathrooms: parseInt(newProperty.bathrooms),
-            square_feet: parseInt(newProperty.square_feet),
+            title,
+            description,
+            price: parseFloat(price),
+            property_type,
+            bedrooms: parseInt(bedrooms),
+            bathrooms: parseInt(bathrooms),
+            square_feet: parseInt(square_feet),
+            address,
+            city,
+            state,
+            zip_code,
+            housing_complex_id:
+              property_type === "house" || property_type === "townhouse"
+                ? null
+                : housing_complex_id || null,
             seller_id: session.user.id,
             images: [],
+            sublease_from: sublease_from
+              ? new Date(sublease_from).toISOString()
+              : null,
+            sublease_to: sublease_to
+              ? new Date(sublease_to).toISOString()
+              : null,
+            is_verified: false,
+            verification_document_url: null,
+            verified_at: null,
           },
         ])
         .select()
@@ -251,16 +432,43 @@ export default function SellerDashboard() {
       if (error) throw error;
       if (!data) throw new Error("Failed to create property");
 
-      const mediaUrls = await uploadMedia(data.id);
+      console.log("New property created:", data);
 
-      const { error: updateError } = await supabase
-        .from("properties")
-        .update({ images: mediaUrls })
-        .eq("id", data.id);
+      // 2. Upload media
+      if (mediaFiles.length > 0) {
+        console.log("Uploading media files...");
+        const mediaUrls = await uploadMedia(data.id);
 
-      if (updateError) throw updateError;
+        // 3. Update the property with media URLs
+        console.log("Updating property with media URLs...");
+        const { error: updateError } = await supabase
+          .from("properties")
+          .update({ images: mediaUrls })
+          .eq("id", data.id);
+        if (updateError) throw updateError;
+        console.log("Property media updated.");
+      } else {
+        console.log("No media files to upload.");
+      }
 
-      setProperties((prev) => [{ ...data, images: mediaUrls }, ...prev]);
+      // 4. If we have a verification document, perform OCR and update is_verified
+      if (verification_document) {
+        console.log("Uploading verification document...");
+        const propertyDetails = {
+          address,
+          city,
+          state,
+          zip_code,
+          price,
+          title,
+        };
+        await handleVerificationUpload(data.id, verification_document, propertyDetails);
+      }
+
+      // 5. Refresh the properties list
+      await fetchProperties();
+
+      // 6. Reset form
       resetForm();
       setOpen(false);
       toast({
@@ -268,7 +476,7 @@ export default function SellerDashboard() {
         description: "Property listed successfully",
       });
     } catch (error: any) {
-      console.error("Error:", error);
+      console.error("Error creating property:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to create property",
@@ -280,6 +488,7 @@ export default function SellerDashboard() {
   };
 
   const validateForm = () => {
+    // Basic form validation
     if (mediaFiles.length === 0) {
       toast({
         title: "Error",
@@ -301,10 +510,12 @@ export default function SellerDashboard() {
       "bathrooms",
       "square_feet",
       "property_type",
+      "sublease_from",
+      "sublease_to",
     ];
 
     for (const field of required) {
-      if (!newProperty[field as keyof PropertyForm]) {
+      if (!(newProperty as any)[field]) {
         toast({
           title: "Error",
           description: `${field.replace("_", " ")} is required`,
@@ -321,6 +532,19 @@ export default function SellerDashboard() {
         variant: "destructive",
       });
       return false;
+    }
+
+    if (newProperty.sublease_from && newProperty.sublease_to) {
+      const fromDate = new Date(newProperty.sublease_from);
+      const toDate = new Date(newProperty.sublease_to);
+      if (fromDate > toDate) {
+        toast({
+          title: "Error",
+          description: "Sublease 'from' date cannot be later than 'to' date",
+          variant: "destructive",
+        });
+        return false;
+      }
     }
 
     return true;
@@ -340,13 +564,33 @@ export default function SellerDashboard() {
       square_feet: "",
       property_type: "house",
       housing_complex_id: "",
+      sublease_from: "",
+      sublease_to: "",
+      verification_document: null,
     });
     setMediaFiles([]);
+    console.log("Form reset.");
   };
 
   const handleAddComplex = (newComplex: HousingComplex) => {
     setHousingComplexes((prev) => [...prev, newComplex]);
-    setNewProperty((prev) => ({ ...prev, housing_complex_id: newComplex.id }));
+    setNewProperty((prev) => ({
+      ...prev,
+      housing_complex_id: newComplex.id,
+    }));
+    console.log("Added new housing complex:", newComplex);
+  };
+
+  const handlePropertyTypeChange = (propertyType: PropertyType) => {
+    setNewProperty((prev) => ({
+      ...prev,
+      property_type: propertyType,
+      housing_complex_id:
+        propertyType === "house" || propertyType === "townhouse"
+          ? ""
+          : prev.housing_complex_id,
+    }));
+    console.log("Property type changed to:", propertyType);
   };
 
   if (loading || loadingHousingComplexes) {
@@ -377,7 +621,7 @@ export default function SellerDashboard() {
             </DialogHeader>
             <ScrollArea className="h-[calc(90vh-8rem)] px-6 pb-6">
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Media Upload Section */}
+                {/* Media Upload */}
                 <div className="space-y-4">
                   <Label>Property Media</Label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -434,7 +678,10 @@ export default function SellerDashboard() {
                       id="title"
                       value={newProperty.title}
                       onChange={(e) =>
-                        setNewProperty({ ...newProperty, title: e.target.value })
+                        setNewProperty({
+                          ...newProperty,
+                          title: e.target.value,
+                        })
                       }
                       required
                     />
@@ -457,12 +704,35 @@ export default function SellerDashboard() {
                     />
                   </div>
 
-                  {/* Housing Complex Section */}
+                  {/* Property Type */}
+                  <div className="space-y-2">
+                    <Label htmlFor="property_type">Property Type</Label>
+                    <select
+                      className="border rounded p-2 w-full"
+                      id="property_type"
+                      value={newProperty.property_type}
+                      onChange={(e) =>
+                        handlePropertyTypeChange(e.target.value as PropertyType)
+                      }
+                    >
+                      <option value="house">House</option>
+                      <option value="apartment">Apartment</option>
+                      <option value="condo">Condo</option>
+                      <option value="townhouse">Townhouse</option>
+                    </select>
+                  </div>
+
+                  {/* Housing Complex */}
                   <div className="space-y-2">
                     <Label htmlFor="housing_complex">Housing Complex</Label>
                     <select
                       className="border rounded p-2 w-full"
-                      value={newProperty.housing_complex_id || ""}
+                      value={
+                        newProperty.property_type === "house" ||
+                        newProperty.property_type === "townhouse"
+                          ? ""
+                          : newProperty.housing_complex_id || ""
+                      }
                       onChange={(e) => {
                         if (e.target.value === "new") {
                           setAddComplexOpen(true);
@@ -473,23 +743,77 @@ export default function SellerDashboard() {
                         } else {
                           setNewProperty({
                             ...newProperty,
-                            housing_complex_id: e.target.value,
+                            housing_complex_id:
+                              newProperty.property_type === "house" ||
+                              newProperty.property_type === "townhouse"
+                                ? ""
+                                : e.target.value,
                           });
                         }
                       }}
+                      disabled={
+                        newProperty.property_type === "house" ||
+                        newProperty.property_type === "townhouse"
+                      }
                     >
-                      <option value="">Select a complex (optional)</option>
-                      {housingComplexes.map((complex) => (
-                        <option key={complex.id} value={complex.id}>
-                          {complex.name}
+                      {newProperty.property_type === "house" ||
+                      newProperty.property_type === "townhouse" ? (
+                        <option value="" disabled>
+                          Individual House
                         </option>
-                      ))}
-                      <option value="new">+ Add New Complex</option>
+                      ) : (
+                        <>
+                          <option value="">Select a complex (optional)</option>
+                          {housingComplexes.map((complex) => (
+                            <option key={complex.id} value={complex.id}>
+                              {complex.name}
+                            </option>
+                          ))}
+                          <option value="new">+ Add New Complex</option>
+                        </>
+                      )}
                     </select>
+                  </div>
+
+                  {/* Verification Document */}
+                  <div className="space-y-2">
+                    <Label htmlFor="verification_document">
+                      Verification Document (Optional)
+                    </Label>
+                    <input
+                      type="file"
+                      id="verification_document"
+                      accept="image/*,application/pdf"
+                      onChange={(e) =>
+                        setNewProperty({
+                          ...newProperty,
+                          verification_document:
+                            e.target.files?.[0] || null,
+                        })
+                      }
+                      className="border rounded p-2 w-full"
+                    />
+                    {newProperty.verification_document && (
+                      <div className="mt-2 flex items-center space-x-2">
+                        {newProperty.verification_document.type === "application/pdf" ? (
+                          <ImageIcon className="h-6 w-6 text-red-500" />
+                        ) : (
+                          <img
+                            src={URL.createObjectURL(newProperty.verification_document)}
+                            alt="Verification Preview"
+                            className="h-6 w-6 object-cover"
+                          />
+                        )}
+                        <span>{newProperty.verification_document.name}</span>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Upload an image or PDF for property verification.
+                    </p>
                   </div>
                 </div>
 
-                {/* Address Information Section */}
+                {/* Address Information */}
                 <AddressInput
                   address={newProperty.address}
                   city={newProperty.city}
@@ -526,31 +850,43 @@ export default function SellerDashboard() {
                       required
                     />
                   </div>
+                </div>
+
+                {/* Sublease Period */}
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="property_type">Property Type</Label>
-                    <select
-                      className="border rounded p-2 w-full"
-                      id="property_type"
-                      value={newProperty.property_type}
+                    <Label htmlFor="sublease_from">Sublease From</Label>
+                    <Input
+                      id="sublease_from"
+                      type="date"
+                      value={newProperty.sublease_from}
                       onChange={(e) =>
                         setNewProperty({
                           ...newProperty,
-                          property_type: e.target.value as
-                            | "house"
-                            | "apartment"
-                            | "condo"
-                            | "townhouse",
+                          sublease_from: e.target.value,
                         })
                       }
-                    >
-                      <option value="house">House</option>
-                      <option value="apartment">Apartment</option>
-                      <option value="condo">Condo</option>
-                      <option value="townhouse">Townhouse</option>
-                    </select>
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sublease_to">Sublease To</Label>
+                    <Input
+                      id="sublease_to"
+                      type="date"
+                      value={newProperty.sublease_to}
+                      onChange={(e) =>
+                        setNewProperty({
+                          ...newProperty,
+                          sublease_to: e.target.value,
+                        })
+                      }
+                      required
+                    />
                   </div>
                 </div>
 
+                {/* Bedrooms, Bathrooms, Sq Ft */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="bedrooms">Bedrooms</Label>
@@ -660,6 +996,7 @@ export default function SellerDashboard() {
                 }
               />
               <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 rounded-lg">
+                {/* Edit Button */}
                 <Button
                   variant="secondary"
                   size="sm"
@@ -671,7 +1008,9 @@ export default function SellerDashboard() {
                   Edit
                 </Button>
                 <EditPropertyDialog
-                  isOpen={isEditDialogOpen && editingProperty?.id === property.id}
+                  isOpen={
+                    isEditDialogOpen && editingProperty?.id === property.id
+                  }
                   onClose={() => {
                     setEditDialogOpen(false);
                     setEditingProperty(null);
@@ -679,10 +1018,13 @@ export default function SellerDashboard() {
                   property={editingProperty}
                   onUpdate={(updatedProperty) => {
                     setProperties((prev) =>
-                      prev.map((p) => (p.id === updatedProperty.id ? updatedProperty : p))
+                      prev.map((p) =>
+                        p.id === updatedProperty.id ? updatedProperty : p
+                      )
                     );
                   }}
                 />
+                {/* Delete Button */}
                 <Button
                   variant="destructive"
                   size="sm"
@@ -696,10 +1038,34 @@ export default function SellerDashboard() {
                       if (error) throw error;
 
                       // Remove property media
-                      await supabase.storage
+                      const { data: files } = await supabase.storage
                         .from("property-media")
-                        .remove([`${property.id}`]);
+                        .list(`${property.id}`, { limit: 100 });
+                      if (files && files.length > 0) {
+                        const filesToRemove = files.map(
+                          (file) => `${property.id}/${file.name}`
+                        );
+                        await supabase.storage
+                          .from("property-media")
+                          .remove(filesToRemove);
+                        console.log("Removed property media files:", filesToRemove);
+                      }
 
+                      // Remove verification documents
+                      const { data: verFiles } = await supabase.storage
+                        .from("property-verifications")
+                        .list(`${property.id}`, { limit: 100 });
+                      if (verFiles && verFiles.length > 0) {
+                        const verFilesToRemove = verFiles.map(
+                          (file) => `${property.id}/${file.name}`
+                        );
+                        await supabase.storage
+                          .from("property-verifications")
+                          .remove(verFilesToRemove);
+                        console.log("Removed property verification files:", verFilesToRemove);
+                      }
+
+                      // Remove from state
                       setProperties((prev) =>
                         prev.filter((p) => p.id !== property.id)
                       );
@@ -708,7 +1074,7 @@ export default function SellerDashboard() {
                         description: "Property deleted successfully",
                       });
                     } catch (error) {
-                      console.error("Error:", error);
+                      console.error("Error deleting property:", error);
                       toast({
                         title: "Error",
                         description: "Failed to delete property",

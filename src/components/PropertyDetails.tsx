@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,8 +12,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 import {
   MapPin,
   Bed,
@@ -23,17 +22,94 @@ import {
   Loader2,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useSavedStatus } from "@/hooks/useSavedStatus"; // Import the custom hook
-import { cn } from "@/lib/utils"; // Import cn utility for class names
-import StripePayment from "@/components/StripePayment";
+import { useSavedStatus } from "@/hooks/useSavedStatus";
+import { cn } from "@/lib/utils";
 
-// Define the HousingComplex interface
+// Duration Display Component
+const DurationDisplay = ({ months }: { months: number }) => {
+  return (
+    <motion.div 
+      className="w-full rounded-lg bg-muted/20 p-6 flex flex-col items-center justify-center space-y-2"
+      initial={{ scale: 0.8, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ 
+        type: "spring",
+        stiffness: 400,
+        damping: 25,
+        delay: 0.2 
+      }}
+    >
+      <motion.div 
+        className="text-4xl font-bold text-primary"
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ 
+          type: "spring",
+          stiffness: 300,
+          damping: 30,
+          delay: 0.4
+        }}
+      >
+        {months}
+      </motion.div>
+      <motion.div 
+        className="text-sm text-muted-foreground"
+        initial={{ y: 10, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ 
+          type: "spring",
+          stiffness: 300,
+          damping: 30,
+          delay: 0.5
+        }}
+      >
+        {months === 1 ? 'month' : 'months'} sublease
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// WalkscoreWidget Component
+const WalkscoreWidget: React.FC<{ address: string }> = ({ address }) => {
+  const { theme } = useTheme();
+  
+  useEffect(() => {
+    (window as any).ws_wsid = 'g6a58aea38a124a729e3e228de2412943';
+    (window as any).ws_address = address;
+    (window as any).ws_format = 'square';
+    (window as any).ws_width = '300';
+    (window as any).ws_height = '300';
+    (window as any).ws_theme = theme === 'dark' ? 'dark' : 'light';
+
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.src = 'https://www.walkscore.com/tile/show-walkscore-tile.php';
+    script.async = true;
+
+    const tileDiv = document.getElementById('ws-walkscore-tile');
+    if (tileDiv) {
+      tileDiv.innerHTML = '';
+      tileDiv.appendChild(script);
+    }
+
+    return () => {
+      if (tileDiv) {
+        tileDiv.innerHTML = '';
+      }
+    };
+  }, [address, theme]);
+
+  return (
+    <div id='ws-walkscore-tile' className="dark:bg-card rounded-lg" />
+  );
+};
+
+// Interfaces
 interface HousingComplex {
   id: string;
   name: string;
 }
 
-// Updated Property interface to include housing_complex
 interface Property {
   id: string;
   title: string;
@@ -54,54 +130,11 @@ interface Property {
     id: string;
     full_name: string;
   };
-  google_maps_link?: string;
   housing_complex_id: string | null;
   housing_complex?: HousingComplex;
+  sublease_from?: string;
+  sublease_to?: string;
 }
-
-// WalkscoreWidget Component
-const WalkscoreWidget: React.FC<{ address: string }> = ({ address }) => {
-  useEffect(() => {
-    // Set the global variables required by the Walkscore script
-    (window as any).ws_wsid = 'g6a58aea38a124a729e3e228de2412943';
-    (window as any).ws_address = address;
-    (window as any).ws_format = 'square';
-    (window as any).ws_width = '500';
-    (window as any).ws_height = '500';
-
-    // Create the script element
-    const script = document.createElement('script');
-    script.type = 'text/javascript';
-    script.src = 'https://www.walkscore.com/tile/show-walkscore-tile.php'; // Changed to HTTPS for security
-    script.async = true;
-
-    // Append the script to the walkscore-tile div
-    const tileDiv = document.getElementById('ws-walkscore-tile');
-    if (tileDiv) {
-      tileDiv.innerHTML = ''; // Clear previous content
-      tileDiv.appendChild(script);
-    }
-
-    // Cleanup: remove the script when component unmounts or address changes
-    return () => {
-      if (tileDiv) {
-        tileDiv.innerHTML = '';
-      }
-    };
-  }, [address]);
-
-  return (
-    <>
-      <style type='text/css'>
-        {`
-          #ws-walkscore-tile { position: relative; text-align: left; }
-          #ws-walkscore-tile * { float: none; }
-        `}
-      </style>
-      <div id='ws-walkscore-tile'></div>
-    </>
-  );
-};
 
 export default function PropertyDetails() {
   const { id } = useParams();
@@ -110,8 +143,6 @@ export default function PropertyDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [contactLoading, setContactLoading] = useState(false);
-
-  // Use the custom hook for saved status
   const { isSaved, loading: savingLoading, toggleSave } = useSavedStatus(id!);
 
   useEffect(() => {
@@ -119,19 +150,17 @@ export default function PropertyDetails() {
       try {
         const { data, error } = await supabase
           .from("properties")
-          .select(
-            `
-              *,
-              seller:seller_id (
-                id,
-                full_name
-              ),
-              housing_complex:housing_complex_id (
-                id,
-                name
-              )
-            `
-          )
+          .select(`
+            *,
+            seller:seller_id (
+              id,
+              full_name
+            ),
+            housing_complex:housing_complex_id (
+              id,
+              name
+            )
+          `)
           .eq("id", id)
           .single();
 
@@ -151,11 +180,7 @@ export default function PropertyDetails() {
   const handleContactAgent = async () => {
     try {
       setContactLoading(true);
-
-      // Check if user is authenticated
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError) throw authError;
-
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         navigate("/auth");
         return;
@@ -218,7 +243,6 @@ export default function PropertyDetails() {
         chatId = chat.id;
       }
 
-      // Navigate to chat
       navigate('/chat', { state: { chatId } });
     } catch (error: any) {
       console.error('Error contacting agent:', error);
@@ -233,6 +257,16 @@ export default function PropertyDetails() {
     } catch (error: any) {
       console.error("Error saving property:", error);
     }
+  };
+
+  const getSubLeaseDuration = () => {
+    if (!property?.sublease_from || !property?.sublease_to) return null;
+    
+    const start = new Date(property.sublease_from);
+    const end = new Date(property.sublease_to);
+    const months = (end.getFullYear() - start.getFullYear()) * 12 + 
+                  (end.getMonth() - start.getMonth());
+    return months;
   };
 
   if (loading) {
@@ -255,7 +289,6 @@ export default function PropertyDetails() {
     );
   }
 
-  // Construct full address for Walkscore
   const fullAddress = `${property.address}, ${property.city}, ${property.state} ${property.zip_code}`;
 
   return (
@@ -287,8 +320,8 @@ export default function PropertyDetails() {
         <div className="grid gap-8 md:grid-cols-[2fr,1fr]">
           {/* Main Content */}
           <div className="space-y-6">
-            {/* Property Title and Address */}
-            <div>
+            {/* Title Section */}
+            <div className="bg-card rounded-lg p-6 shadow-sm">
               <h1 className="text-3xl font-bold mb-2">{property.title}</h1>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <MapPin className="h-4 w-4" />
@@ -297,7 +330,6 @@ export default function PropertyDetails() {
                   {property.zip_code}
                 </span>
               </div>
-              {/* Display Housing Complex Name if available */}
               {property.housing_complex?.name && (
                 <div className="flex items-center gap-2 text-muted-foreground mt-1">
                   <Home className="h-4 w-4" />
@@ -307,8 +339,8 @@ export default function PropertyDetails() {
             </div>
 
             {/* Property Features */}
-            <div className="grid grid-cols-4 gap-4">
-              <Card>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="shadow-sm">
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-2">
                     <Bed className="h-4 w-4" />
@@ -316,7 +348,7 @@ export default function PropertyDetails() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="shadow-sm">
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-2">
                     <Bath className="h-4 w-4" />
@@ -324,7 +356,7 @@ export default function PropertyDetails() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="shadow-sm">
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-2">
                     <Square className="h-4 w-4" />
@@ -332,7 +364,7 @@ export default function PropertyDetails() {
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="shadow-sm">
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-2">
                     <Home className="h-4 w-4" />
@@ -342,8 +374,41 @@ export default function PropertyDetails() {
               </Card>
             </div>
 
+            {/* Sublease Period */}
+            {property.sublease_from && property.sublease_to && (
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle>Sublease Period</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <motion.div 
+                      className="flex items-center justify-between"
+                      initial={{ x: -20, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      <div>
+                        <p className="text-sm text-muted-foreground">From</p>
+                        <p className="font-medium">
+                          {new Date(property.sublease_from).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">To</p>
+                        <p className="font-medium">
+                          {new Date(property.sublease_to).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </motion.div>
+                    <DurationDisplay months={getSubLeaseDuration() || 0} />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Property Description */}
-            <Card>
+            <Card className="shadow-sm">
               <CardHeader>
                 <CardTitle>Description</CardTitle>
               </CardHeader>
@@ -352,54 +417,57 @@ export default function PropertyDetails() {
               </CardContent>
             </Card>
 
-            {/* Walkscore Widget */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Walkscore</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <WalkscoreWidget address={fullAddress} />
-              </CardContent>
-            </Card>
+            {/* Location and Walkscore Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Location Card */}
+              <Card className="shadow-sm p-3">
+                <CardHeader className="pb-2">
+                  <CardTitle>Location</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="relative rounded-lg overflow-hidden">
+                    <iframe
+                      className="w-full h-[300px] border-0 dark:invert-[.9] dark:hue-rotate-180"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I&q=${encodeURIComponent(
+                        fullAddress
+                      )}&zoom=15`}
+                      allowFullScreen
+                    />
+                  </div>
+                  <div className="p-4">
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+                        fullAddress
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <MapPin className="h-4 w-4" />
+                      <span>Get Directions</span>
+                    </a>
+                  </div>
+                </CardContent>
+              </Card>
 
-            {/* Google Maps Section */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Location</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="aspect-video relative rounded-lg overflow-hidden">
-                  <iframe
-                    className="w-full h-[300px] border-0"
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I&q=${encodeURIComponent(
-                      fullAddress
-                    )}&zoom=15`}
-                    allowFullScreen
-                  ></iframe>
-                </div>
-                <div className="mt-4">
-                  <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                      fullAddress
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-                  >
-                    <MapPin className="h-4 w-4" />
-                    <span>Open in Google Maps</span>
-                  </a>
-                </div>
-              </CardContent>
-            </Card>
+              {/* Walkscore Card */}
+              <Card className="shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle>Walkscore</CardTitle>
+                </CardHeader>
+                <CardContent className="flex items-center justify-center">
+                  <WalkscoreWidget address={fullAddress} />
+                </CardContent>
+              </Card>
+            </div>
           </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Price Information */}
-            <Card>
+            <Card className="shadow-sm">
               <CardHeader>
                 <CardTitle>Price</CardTitle>
                 <CardDescription>
@@ -415,7 +483,7 @@ export default function PropertyDetails() {
             </Card>
 
             {/* Agent Details */}
-            <Card>
+            <Card className="shadow-sm">
               <CardHeader>
                 <CardTitle>Agent Details</CardTitle>
               </CardHeader>
@@ -428,7 +496,7 @@ export default function PropertyDetails() {
                   whileTap={{ scale: 0.95 }}
                   className={cn(
                     "w-full py-3 px-4 rounded-lg text-white font-semibold flex items-center justify-center transition-colors",
-                    "bg-primary hover:bg-primary-dark"
+                    "bg-primary hover:bg-primary/90"
                   )}
                   onClick={handleContactAgent}
                   disabled={contactLoading}
@@ -451,7 +519,7 @@ export default function PropertyDetails() {
               whileTap={{ scale: 0.95 }}
               className={cn(
                 "w-full py-3 px-4 rounded-lg text-white font-semibold flex items-center justify-center transition-colors",
-                isSaved ? "bg-red-500 hover:bg-red-600" : "bg-primary hover:bg-primary-dark"
+                isSaved ? "bg-red-500 hover:bg-red-600" : "bg-primary hover:bg-primary/90"
               )}
               onClick={handleSaveClick}
               disabled={savingLoading}
@@ -464,19 +532,8 @@ export default function PropertyDetails() {
                 "Save Property"
               )}
             </motion.button>
-
-            {/* Add Stripe Payment Component */}
-            {property && (
-              <StripePayment
-                propertyId={property.id}
-                propertyTitle={property.title}
-                price={property.price}
-                sellerId={property.seller_id}
-              />
-            )}
           </div>
         </div>
       </div>
     </div>
-  );
-}
+  )};
