@@ -14,7 +14,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "./integrations/supabase/client";
 import PropertyDetails from "./components/PropertyDetails";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { Loader2 } from "lucide-react";
 import HousingComplexes from "./components/HousingComplexes";
 import SavedProperties from "./pages/SavedProperties";
 const queryClient = new QueryClient();
