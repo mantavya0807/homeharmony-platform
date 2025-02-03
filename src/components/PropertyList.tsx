@@ -14,9 +14,9 @@ export function PropertyList({ location, filters }) {
       const { data: { user }, error } = await supabase.auth.getUser();
       if (user) {
         const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
           .single();
 
         if (profileError) {
@@ -47,34 +47,32 @@ export function PropertyList({ location, filters }) {
       }
 
       // Apply property type filter
-      if (filters.propertyType && filters.propertyType !== 'any') {
+      if (filters.propertyType && filters.propertyType !== "any") {
         query = query.eq("property_type", filters.propertyType);
       }
 
       // Apply bed filter
-      if (filters.beds && filters.beds !== 'any') {
-        query = query.gte('bedrooms', parseInt(filters.beds));
+      if (filters.beds && filters.beds !== "any") {
+        query = query.gte("bedrooms", parseInt(filters.beds));
       }
 
       // Apply bath filter
-      if (filters.baths && filters.baths !== 'any') {
-        query = query.gte('bathrooms', parseInt(filters.baths));
+      if (filters.baths && filters.baths !== "any") {
+        query = query.gte("bathrooms", parseInt(filters.baths));
       }
 
       // Apply square feet filter
       if (filters.minSquareFeet) {
-        query = query.gte('square_feet', parseInt(filters.minSquareFeet));
+        query = query.gte("square_feet", parseInt(filters.minSquareFeet));
       }
       if (filters.maxSquareFeet) {
-        query = query.lte('square_feet', parseInt(filters.maxSquareFeet));
+        query = query.lte("square_feet", parseInt(filters.maxSquareFeet));
       }
 
       // Apply price range filter
       if (filters.priceRange) {
         const [minPrice, maxPrice] = filters.priceRange;
-        query = query
-          .gte('price', minPrice)
-          .lte('price', maxPrice);
+        query = query.gte("price", minPrice).lte("price", maxPrice);
       }
 
       const { data, error } = await query;
@@ -106,6 +104,27 @@ export function PropertyList({ location, filters }) {
   // Choose which PropertyCard component to use based on role
   const CardComponent = userRole === "seller" ? SellerPropertyCard : PropertyCard;
 
+  // Add click handler function
+  const handleClick = async (propertyId: string) => {
+    try {
+      // Send click data to API
+      await fetch(`${import.meta.env.VITE_API_URL}/api/property-clicks`, {
+        method: "POST", 
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ propertyId }),
+      });
+
+      // Navigate to property details
+      window.location.href = `/properties/${propertyId}`;
+    } catch (error) {
+      console.error("Error tracking click:", error);
+      // Still navigate even if tracking fails
+      window.location.href = `/properties/${propertyId}`;
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
       {properties.map((property) => (
@@ -117,11 +136,17 @@ export function PropertyList({ location, filters }) {
           location={`${property.city}, ${property.state}`}
           beds={property.bedrooms}
           baths={property.bathrooms}
+          is_verified={property.is_verified}
           sqft={property.square_feet}
-          imageUrl={property.images?.[0] || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"}
+          imageUrl={
+            property.images?.[0] ||
+            "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"
+          }
           userRole={userRole}
           sublease_from={property.sublease_from}
           sublease_to={property.sublease_to}
+          clicks={property.clicks || 0} // Add clicks prop
+          onClick={() => handleClick(property.id)} // Add click handler
         />
       ))}
     </div>

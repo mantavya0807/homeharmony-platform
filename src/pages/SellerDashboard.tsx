@@ -1,5 +1,3 @@
-// src/pages/SellerDashboard.tsx
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,9 +20,10 @@ import { PropertyCard } from "@/components/PropertyCard1";
 import { EditPropertyDialog } from "@/pages/EditPropertyDialog";
 import AddHousingComplex from "@/components/AddHousingComplex";
 import { AddressInput } from "@/components/AddressInput";
-import { performOCR } from "@/utils/ocr";
+import StripeOnboarding from "@/components/StripeOnboarding";
 
 import type { Database } from "@/integrations/supabase/types";
+// import { verifyDocument } from "@/server/api/documentVerification";
 
 type Property = Database["public"]["Tables"]["properties"]["Row"];
 type HousingComplex = Database["public"]["Tables"]["housing_complexes"]["Row"];
@@ -47,6 +46,8 @@ interface PropertyForm {
   sublease_from?: string;
   sublease_to?: string;
   verification_document?: File | null;
+  original_lease_rent?: string;
+  original_lease_term?: string;
 }
 
 interface MediaFile {
@@ -58,6 +59,8 @@ interface MediaFile {
 export default function SellerDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const [stripeConnected, setStripeConnected] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -85,12 +88,30 @@ export default function SellerDashboard() {
     sublease_from: "",
     sublease_to: "",
     verification_document: null,
+    original_lease_rent: "",
+    original_lease_term: "",
   });
+
+  useEffect(() => {
+    const checkStripeConnection = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("stripe_account_id")
+          .eq("id", session.user.id)
+          .single();
+        setStripeConnected(!!profile?.stripe_account_id);
+      }
+    };
+    checkStripeConnection();
+  }, []);
 
   useEffect(() => {
     fetchProperties();
     fetchHousingComplexes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   const fetchProperties = async () => {
@@ -104,24 +125,20 @@ export default function SellerDashboard() {
         navigate("/auth");
         return;
       }
-
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", session.user.id)
         .single();
-
       if (profile?.role !== "seller") {
         navigate("/dashboard");
         return;
       }
-
       const { data, error } = await supabase
         .from("properties")
         .select("*")
         .eq("seller_id", session.user.id)
         .order("created_at", { ascending: false });
-
       if (error) throw error;
       setProperties(data || []);
       console.log("Fetched Properties:", data);
@@ -143,7 +160,6 @@ export default function SellerDashboard() {
         .from("housing_complexes")
         .select("*")
         .order("name", { ascending: true });
-
       if (error) throw error;
       setHousingComplexes(data || []);
       console.log("Fetched Housing Complexes:", data);
@@ -159,6 +175,27 @@ export default function SellerDashboard() {
     }
   };
 
+  const handlePropertyTypeChange = (propertyType: PropertyType) => {
+    setNewProperty((prev) => ({
+      ...prev,
+      property_type: propertyType,
+      housing_complex_id:
+        propertyType === "house" || propertyType === "townhouse"
+          ? ""
+          : prev.housing_complex_id,
+    }));
+    console.log("Property type changed to:", propertyType);
+  };
+
+  const handleAddComplex = (newComplex: HousingComplex) => {
+    setHousingComplexes((prev) => [...prev, newComplex]);
+    setNewProperty((prev) => ({
+      ...prev,
+      housing_complex_id: newComplex.id,
+    }));
+    console.log("Added new housing complex:", newComplex);
+  };
+
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     files.forEach((file) => {
@@ -170,7 +207,6 @@ export default function SellerDashboard() {
         });
         return;
       }
-
       const type = file.type.startsWith("image/") ? "image" : "video";
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -199,8 +235,6 @@ export default function SellerDashboard() {
       try {
         const fileExt = mediaFile.file.name.split(".").pop();
         const fileName = `${propertyId}/${Date.now()}-${index}.${fileExt}`;
-
-        // Remove any existing files for this property to avoid clutter
         const { data: existingFiles } = await supabase.storage
           .from("property-media")
           .list(`${propertyId}`);
@@ -211,8 +245,6 @@ export default function SellerDashboard() {
           await supabase.storage.from("property-media").remove(filesToRemove);
           console.log("Removed existing media files:", filesToRemove);
         }
-
-        // Upload new file
         const { error: uploadError } = await supabase.storage
           .from("property-media")
           .upload(fileName, mediaFile.file, {
@@ -220,9 +252,9 @@ export default function SellerDashboard() {
             upsert: true,
           });
         if (uploadError) throw uploadError;
-
-        const { data } = supabase.storage.from("property-media").getPublicUrl(fileName);
-
+        const { data } = supabase.storage
+          .from("property-media")
+          .getPublicUrl(fileName);
         console.log("Uploaded media file:", fileName);
         return data.publicUrl;
       } catch (error) {
@@ -230,14 +262,9 @@ export default function SellerDashboard() {
         throw error;
       }
     });
-
     return await Promise.all(uploadPromises);
   };
 
-  /**
-   * handleVerificationUpload
-   * Uploads the verification document and updates the property with verification details.
-   */
   const handleVerificationUpload = async (
     propertyId: string,
     file: File,
@@ -247,58 +274,90 @@ export default function SellerDashboard() {
       state: string;
       zip_code: string;
       price: string;
-      title: string;
+      original_lease_rent?: string;
     }
   ) => {
     try {
-      if (!file) {
-        throw new Error("No verification file provided");
-      }
-
-      // Validate file size (max 5MB)
-      const maxSize = 5 * 1024 * 1024;
+      console.log("[Frontend] Starting verification upload for property:", propertyId);
+      console.log("[Frontend] File details:", {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+      });
+      console.log("[Frontend] Property details:", propertyDetails);
+  
+      // Validate file size and type
+      const maxSize = 5 * 1024 * 1024; // 5MB
       if (file.size > maxSize) {
         throw new Error("File size must be less than 5MB");
       }
-
-      // Validate file type
-      const allowedTypes = [
-        "image/jpeg",
-        "image/png",
-        "image/jpg",
-        "application/pdf",
-      ];
+      const allowedTypes = ["image/jpeg", "image/png", "image/jpg", "application/pdf"];
       if (!allowedTypes.includes(file.type)) {
-        throw new Error(
-          "File type not supported. Please upload a JPEG, PNG, or PDF file."
-        );
+        throw new Error("File type not supported. Please upload a JPEG, PNG, or PDF file.");
       }
-
-      // Perform OCR / Document Verification
-      console.log("Starting verification document upload for property:", propertyId);
-      const ocrResult = await performOCR(file, propertyDetails);
-
-      // Log result for debugging
-      console.log("OCR Result:", ocrResult);
-
-      if (!ocrResult.success) {
-        throw new Error(ocrResult.error || "Document verification failed");
+    
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("propertyDetails", JSON.stringify(propertyDetails));
+    
+      console.log("[Frontend] Sending request to /api/verify-document ...");
+      const response = await fetch("http://localhost:4000/api/verify-document", {
+        method: "POST",
+        body: formData,
+      });
+    
+      console.log("[Frontend] Received response:", response.status);
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("[Frontend] Verification error response:", errorData);
+        throw new Error(errorData.error || "Document verification failed");
       }
-
-      // Optionally, display the matches found
-      if (ocrResult.matches && ocrResult.matches.length > 0) {
-        toast({
-          title: "Document Analysis",
-          description: `Found matches for: ${ocrResult.matches.join(", ")}`,
-        });
+    
+      const verificationResult = await response.json();
+      console.log("[Frontend] Verification result:", verificationResult);
+    
+      // --- Compute additional lease info values ---
+      // (Note: In your OCR text, several numbers may be extracted.
+      // Currently, we use the first extracted number as the lease rent,
+      // but you may want to choose a different match based on context.)
+      const rawLeaseRent = verificationResult.leaseInfo?.originalRent;
+      const originalLease = rawLeaseRent != null && !isNaN(parseFloat(rawLeaseRent))
+        ? parseFloat(rawLeaseRent)
+        : null;
+    
+      const currentPrice = propertyDetails.price ? parseFloat(propertyDetails.price) : null;
+    
+      let rentDifferential = null;
+      if (originalLease !== null && currentPrice !== null && currentPrice !== 0) {
+        const diff = ((originalLease - currentPrice) / currentPrice) * 100;
+        rentDifferential = !isNaN(diff) ? parseFloat(diff.toFixed(2)) : null;
+        // Ensure the differential is within the allowed range (numeric(5,2) allows up to 999.99)
+        if (rentDifferential !== null && Math.abs(rentDifferential) >= 1000) {
+          console.warn("[Frontend] Computed rent differential is out of range:", rentDifferential);
+          rentDifferential = null;
+        }
       }
-
-      // Create a unique file path
+    
+      // Convert lease term safely (should be an integer)
+      const leaseTermRaw = verificationResult.leaseInfo?.leaseTerm;
+      let originalLeaseTerm = null;
+      if (leaseTermRaw != null) {
+        const term = parseInt(String(leaseTermRaw), 10);
+        originalLeaseTerm = isNaN(term) ? null : term;
+      }
+    
+      console.log("[Frontend] Computed values:", {
+        originalLease,
+        currentPrice,
+        rentDifferential,
+        originalLeaseTerm,
+      });
+    
+      // --- Upload the verification document to Supabase ---
       const timestamp = Date.now();
       const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
       const filePath = `${propertyId}/${timestamp}-${sanitizedFileName}`;
-
-      // Upload the file to Supabase Storage
+    
       const { error: uploadError } = await supabase.storage
         .from("property-verifications")
         .upload(filePath, file, {
@@ -306,54 +365,72 @@ export default function SellerDashboard() {
           contentType: file.type,
           upsert: true,
         });
-
+    
       if (uploadError) {
         throw new Error(`Failed to upload file: ${uploadError.message}`);
       }
-
-      // Get the public URL
+    
       const { data: publicUrlData } = supabase.storage
         .from("property-verifications")
         .getPublicUrl(filePath);
-
+    
       if (!publicUrlData?.publicUrl) {
         throw new Error("Failed to get public URL for uploaded file");
       }
-
-      // Update property with verification status
-      const { error: updateError } = await supabase
-        .from("properties")
-        .update({
-          is_verified: ocrResult.is_verified,
-          verification_document_url: publicUrlData.publicUrl,
-          verified_at: ocrResult.is_verified ? new Date().toISOString() : null,
-        })
-        .eq("id", propertyId);
-
+    
+      // --- Update the property record with verification data ---
+// Inside handleVerificationUpload function
+const { error: updateError } = await supabase
+  .from("properties")
+  .update({
+    is_verified: verificationResult.is_verified,
+    verification_document_url: publicUrlData.publicUrl,
+    verified_at: verificationResult.is_verified ? new Date().toISOString() : null,
+    sublease_from: verificationResult.leaseInfo?.startDate
+      ? new Date(verificationResult.leaseInfo.startDate).toISOString()
+      : null,
+    sublease_to: verificationResult.leaseInfo?.endDate
+      ? new Date(verificationResult.leaseInfo.endDate).toISOString()
+      : null,
+    original_lease_rent: verificationResult.leaseInfo?.originalRent || null,
+    // Calculate rent differential safely
+    rent_differential: (() => {
+      const originalRent = verificationResult.leaseInfo?.originalRent;
+      const currentPrice = parseFloat(propertyDetails.price);
+      if (!originalRent || !currentPrice || currentPrice === 0) return null;
+      
+      // Calculate percentage difference
+      const diff = ((originalRent - currentPrice) / currentPrice) * 100;
+      // Ensure the value is within reasonable bounds
+      return Math.max(Math.min(diff, 999.99), -999.99);
+    })(),
+    original_lease_term: verificationResult.leaseInfo?.leaseTerm || null,
+  })
+  .eq("id", propertyId);
+        console.log(verificationResult);
       if (updateError) {
+        console.error("Update error details:", updateError);
         throw new Error("Failed to update property verification status");
       }
-
+    
       toast({
-        title: ocrResult.is_verified
+        title: verificationResult.is_verified
           ? "Verification Successful"
           : "Verification Pending",
-        description: ocrResult.is_verified
-          ? `Document verified (Score: ${ocrResult.score?.toFixed(
-              2
-            )}). Matches: ${ocrResult.matches?.length}`
+        description: verificationResult.is_verified
+          ? `Document verified (Score: ${verificationResult.score?.toFixed(2)})`
           : "Not enough matching details found for automatic verification.",
-        variant: ocrResult.is_verified ? "default" : "destructive",
+        variant: verificationResult.is_verified ? "default" : "destructive",
       });
-
+    
       return {
         success: true,
-        is_verified: ocrResult.is_verified,
+        is_verified: verificationResult.is_verified,
         documentUrl: publicUrlData.publicUrl,
-        matches: ocrResult.matches,
+        matches: verificationResult.matches,
       };
     } catch (error: any) {
-      console.error("Verification Error:", error);
+      console.error("[Frontend] Verification Error:", error);
       toast({
         title: "Verification Failed",
         description: error.message || "Failed to verify property.",
@@ -362,18 +439,19 @@ export default function SellerDashboard() {
       throw error;
     }
   };
+  
+  
+  
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
     setUploading(true);
-
     try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session?.user) throw new Error("Not authenticated");
-
       const {
         title,
         description,
@@ -390,9 +468,8 @@ export default function SellerDashboard() {
         sublease_from,
         sublease_to,
         verification_document,
+        original_lease_rent,
       } = newProperty;
-
-      // 1. Insert the property (initially unverified)
       console.log("Creating new property in Supabase...");
       const { data, error } = await supabase
         .from("properties")
@@ -418,28 +495,23 @@ export default function SellerDashboard() {
             sublease_from: sublease_from
               ? new Date(sublease_from).toISOString()
               : null,
-            sublease_to: sublease_to
-              ? new Date(sublease_to).toISOString()
-              : null,
+            sublease_to: sublease_to ? new Date(sublease_to).toISOString() : null,
             is_verified: false,
             verification_document_url: null,
             verified_at: null,
+            original_lease_rent: original_lease_rent
+              ? parseFloat(original_lease_rent)
+              : null,
           },
         ])
         .select()
         .single();
-
       if (error) throw error;
       if (!data) throw new Error("Failed to create property");
-
       console.log("New property created:", data);
-
-      // 2. Upload media
       if (mediaFiles.length > 0) {
         console.log("Uploading media files...");
         const mediaUrls = await uploadMedia(data.id);
-
-        // 3. Update the property with media URLs
         console.log("Updating property with media URLs...");
         const { error: updateError } = await supabase
           .from("properties")
@@ -450,8 +522,6 @@ export default function SellerDashboard() {
       } else {
         console.log("No media files to upload.");
       }
-
-      // 4. If we have a verification document, perform OCR and update is_verified
       if (verification_document) {
         console.log("Uploading verification document...");
         const propertyDetails = {
@@ -460,15 +530,11 @@ export default function SellerDashboard() {
           state,
           zip_code,
           price,
-          title,
+          original_lease_rent,
         };
         await handleVerificationUpload(data.id, verification_document, propertyDetails);
       }
-
-      // 5. Refresh the properties list
       await fetchProperties();
-
-      // 6. Reset form
       resetForm();
       setOpen(false);
       toast({
@@ -488,7 +554,6 @@ export default function SellerDashboard() {
   };
 
   const validateForm = () => {
-    // Basic form validation
     if (mediaFiles.length === 0) {
       toast({
         title: "Error",
@@ -497,7 +562,6 @@ export default function SellerDashboard() {
       });
       return false;
     }
-
     const required = [
       "title",
       "description",
@@ -513,7 +577,6 @@ export default function SellerDashboard() {
       "sublease_from",
       "sublease_to",
     ];
-
     for (const field of required) {
       if (!(newProperty as any)[field]) {
         toast({
@@ -524,7 +587,6 @@ export default function SellerDashboard() {
         return false;
       }
     }
-
     if (!/^\d{5}$/.test(newProperty.zip_code)) {
       toast({
         title: "Error",
@@ -533,7 +595,6 @@ export default function SellerDashboard() {
       });
       return false;
     }
-
     if (newProperty.sublease_from && newProperty.sublease_to) {
       const fromDate = new Date(newProperty.sublease_from);
       const toDate = new Date(newProperty.sublease_to);
@@ -546,7 +607,6 @@ export default function SellerDashboard() {
         return false;
       }
     }
-
     return true;
   };
 
@@ -567,30 +627,11 @@ export default function SellerDashboard() {
       sublease_from: "",
       sublease_to: "",
       verification_document: null,
+      original_lease_rent: "",
+      original_lease_term: "",
     });
     setMediaFiles([]);
     console.log("Form reset.");
-  };
-
-  const handleAddComplex = (newComplex: HousingComplex) => {
-    setHousingComplexes((prev) => [...prev, newComplex]);
-    setNewProperty((prev) => ({
-      ...prev,
-      housing_complex_id: newComplex.id,
-    }));
-    console.log("Added new housing complex:", newComplex);
-  };
-
-  const handlePropertyTypeChange = (propertyType: PropertyType) => {
-    setNewProperty((prev) => ({
-      ...prev,
-      property_type: propertyType,
-      housing_complex_id:
-        propertyType === "house" || propertyType === "townhouse"
-          ? ""
-          : prev.housing_complex_id,
-    }));
-    console.log("Property type changed to:", propertyType);
   };
 
   if (loading || loadingHousingComplexes) {
@@ -603,6 +644,16 @@ export default function SellerDashboard() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {!stripeConnected && (
+        <div className="mb-8">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+            <p className="text-yellow-800">
+              Connect your Stripe account to start receiving payments
+            </p>
+          </div>
+          <StripeOnboarding />
+        </div>
+      )}
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">My Listings</h1>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -669,7 +720,6 @@ export default function SellerDashboard() {
                     Upload images or videos (max 10MB each)
                   </p>
                 </div>
-
                 {/* Basic Information */}
                 <div className="space-y-4">
                   <div className="space-y-2">
@@ -686,7 +736,6 @@ export default function SellerDashboard() {
                       required
                     />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>
                     <Textarea
@@ -703,7 +752,6 @@ export default function SellerDashboard() {
                       required
                     />
                   </div>
-
                   {/* Property Type */}
                   <div className="space-y-2">
                     <Label htmlFor="property_type">Property Type</Label>
@@ -721,7 +769,6 @@ export default function SellerDashboard() {
                       <option value="townhouse">Townhouse</option>
                     </select>
                   </div>
-
                   {/* Housing Complex */}
                   <div className="space-y-2">
                     <Label htmlFor="housing_complex">Housing Complex</Label>
@@ -774,7 +821,6 @@ export default function SellerDashboard() {
                       )}
                     </select>
                   </div>
-
                   {/* Verification Document */}
                   <div className="space-y-2">
                     <Label htmlFor="verification_document">
@@ -787,19 +833,21 @@ export default function SellerDashboard() {
                       onChange={(e) =>
                         setNewProperty({
                           ...newProperty,
-                          verification_document:
-                            e.target.files?.[0] || null,
+                          verification_document: e.target.files?.[0] || null,
                         })
                       }
                       className="border rounded p-2 w-full"
                     />
                     {newProperty.verification_document && (
                       <div className="mt-2 flex items-center space-x-2">
-                        {newProperty.verification_document.type === "application/pdf" ? (
+                        {newProperty.verification_document.type ===
+                        "application/pdf" ? (
                           <ImageIcon className="h-6 w-6 text-red-500" />
                         ) : (
                           <img
-                            src={URL.createObjectURL(newProperty.verification_document)}
+                            src={URL.createObjectURL(
+                              newProperty.verification_document
+                            )}
                             alt="Verification Preview"
                             className="h-6 w-6 object-cover"
                           />
@@ -812,8 +860,7 @@ export default function SellerDashboard() {
                     </p>
                   </div>
                 </div>
-
-                {/* Address Information */}
+                {/* Address Input */}
                 <AddressInput
                   address={newProperty.address}
                   city={newProperty.city}
@@ -832,8 +879,7 @@ export default function SellerDashboard() {
                     setNewProperty((prev) => ({ ...prev, zip_code: zip }))
                   }
                 />
-
-                {/* Property Details */}
+                {/* Price and Lease Details */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="price">Price</Label>
@@ -850,9 +896,24 @@ export default function SellerDashboard() {
                       required
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="original_lease_rent">
+                      Original Lease Rent (optional)
+                    </Label>
+                    <Input
+                      id="original_lease_rent"
+                      type="number"
+                      value={newProperty.original_lease_rent || ""}
+                      onChange={(e) =>
+                        setNewProperty({
+                          ...newProperty,
+                          original_lease_rent: e.target.value,
+                        })
+                      }
+                      placeholder="e.g. 1000"
+                    />
+                  </div>
                 </div>
-
-                {/* Sublease Period */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="sublease_from">Sublease From</Label>
@@ -885,8 +946,7 @@ export default function SellerDashboard() {
                     />
                   </div>
                 </div>
-
-                {/* Bedrooms, Bathrooms, Sq Ft */}
+                {/* Bedrooms, Bathrooms, Square Feet */}
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="bedrooms">Bedrooms</Label>
@@ -938,7 +998,6 @@ export default function SellerDashboard() {
                     />
                   </div>
                 </div>
-
                 <Button type="submit" className="w-full" disabled={uploading}>
                   {uploading ? (
                     <>
@@ -954,13 +1013,11 @@ export default function SellerDashboard() {
           </DialogContent>
         </Dialog>
       </div>
-
       <AddHousingComplex
         isOpen={addComplexOpen}
         onClose={() => setAddComplexOpen(false)}
         onAdd={handleAddComplex}
       />
-
       {properties.length === 0 ? (
         <div className="text-center py-12">
           <div className="flex flex-col items-center justify-center space-y-4">
@@ -996,7 +1053,6 @@ export default function SellerDashboard() {
                 }
               />
               <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 rounded-lg">
-                {/* Edit Button */}
                 <Button
                   variant="secondary"
                   size="sm"
@@ -1008,9 +1064,7 @@ export default function SellerDashboard() {
                   Edit
                 </Button>
                 <EditPropertyDialog
-                  isOpen={
-                    isEditDialogOpen && editingProperty?.id === property.id
-                  }
+                  isOpen={isEditDialogOpen && editingProperty?.id === property.id}
                   onClose={() => {
                     setEditDialogOpen(false);
                     setEditingProperty(null);
@@ -1024,7 +1078,6 @@ export default function SellerDashboard() {
                     );
                   }}
                 />
-                {/* Delete Button */}
                 <Button
                   variant="destructive"
                   size="sm"
@@ -1034,10 +1087,7 @@ export default function SellerDashboard() {
                         .from("properties")
                         .delete()
                         .eq("id", property.id);
-
                       if (error) throw error;
-
-                      // Remove property media
                       const { data: files } = await supabase.storage
                         .from("property-media")
                         .list(`${property.id}`, { limit: 100 });
@@ -1050,8 +1100,6 @@ export default function SellerDashboard() {
                           .remove(filesToRemove);
                         console.log("Removed property media files:", filesToRemove);
                       }
-
-                      // Remove verification documents
                       const { data: verFiles } = await supabase.storage
                         .from("property-verifications")
                         .list(`${property.id}`, { limit: 100 });
@@ -1064,8 +1112,6 @@ export default function SellerDashboard() {
                           .remove(verFilesToRemove);
                         console.log("Removed property verification files:", verFilesToRemove);
                       }
-
-                      // Remove from state
                       setProperties((prev) =>
                         prev.filter((p) => p.id !== property.id)
                       );

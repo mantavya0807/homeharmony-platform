@@ -28,6 +28,8 @@ export function PropertyCard({
 }: PropertyCardProps) {
   const navigate = useNavigate();
 
+ 
+  
   return (
     <Card 
       className="overflow-hidden transition-all duration-300 hover:shadow-lg animate-fadeIn cursor-pointer group relative"

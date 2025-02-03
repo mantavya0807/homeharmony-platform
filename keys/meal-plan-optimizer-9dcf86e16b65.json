@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "meal-plan-optimizer",
+  "private_key_id": "9dcf86e16b65bcf8f515d1f05dc6f7b94b702390",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCqCyglKfuqwiEW\nBYUrPAyjUXL6OaVq1kl5YclBPvWmhVGvzUo0+QHCukwNFFtot+vbZWmwkHx9po/k\nsCDF/Bd88SI3BdsYAQDXvhc78FGUEWwOTTRtnijAUw1ugy8vXu8y5WuJmzaAdCbN\nK8J4DuqPY7iwZ+ppGv8c/Gmp/PDnDiAbeonVWrmZZFknNODwYJ7RvZz3DfYt9PeJ\njxxnhceseLIegwDk2h92IJOxyZkrAsdmzq7y+ftmdjAkXsQa0c/TGnd7f7vr7KsQ\nwqklv+d44p563IZwHylW5Ow0ddEszSsCvW3yOexq5e+3tdQV1ys/NKSioA8F20w4\n+eshscATAgMBAAECggEAFMIc6gCIjQ163YXZ/m+ruUpJp3tfEr5LJOrHl1P4yBXR\nZY1BqFrXmK6GdzhLemqte9CTCO9yiyJIwamwroq6UVHck+v+lZ0VvcCidHo/czx3\nPP22z0T2A5h/9MRF/9nuiH+SU6+jhSXo0LYtXNuxTcTmOH7PEnqttxunSI2s2P/g\niXU06cB/zP6fnpX2fuFAe0lQvL9xU8G1ol/S4ByOyCoTp0x8mHejtW0JF7SkFr98\n2Nj3rUS8h8UvsZLcv8RhuUyTtntd6DaKvKZZ2TVgF6CLMBDFY/t5hMdmfMCUr+EL\nv4Li7OgOc4TH9XVUZRl1LNt+KwLWb0/nPpGq+61ftQKBgQDu9Ma2AcyVqvjHZ0E1\nXxEom7GYAcxiGESuB9sAwytU6rmVVr0Z0Auz8O6ewceFjUC/hRprHT3qlz8272ua\nUmSxusTL76VjIOVwnPFmgGeiyqv6WUlbxWbj8mo8xCCOAOcRMa3bGf9m5vPOmjHl\nuFB7LhBgUS8JmoW3NaQnsOQCDQKBgQC2LBIAbtQN5qGP84OUHjzX5livkcCsD5Np\nlPvS0Q6BIgBEJFKiHG4qFRD7dRioZP20OmiWxCN1J6qRQMV1savl3miczzCuVlEx\nfKFLnpHvX6+dkWzZuEZ4W3FA3WVkLb9MmHvrveD6zTrUXEUr9rik01kgcsBQXqsU\nNLoLIxninwKBgQCbtxDivEtoYNDbiHLa58eTsdnKF6nrZqsiyWWymnxbStaC9dIm\nxwdJTEEDXX26jvDZnVA46wZVIBiGoQB6wSRzGSVzTAh3j5FUkEFTLWvbjr0BWDvQ\nvNOuyWLnlFsujnIFJ12HAOsJUIkiYiMP8ssnaj4rtdu0I2jtmdwOLVx35QKBgEqj\nJcD9p24Glx0mdTtjZCRE4QMV4W3dd9UjUEWgl6O6rYc9pol6wnwFY47S/AZKUlPc\nNmvG8owWc2DNu9krsTUd+Zh9nwFepidzW5Zi4oHDn20cXw+Y226GcJFV5Cu2PpGA\nTA1bH2lCWp8VKtYHYMFPQk30Fe0XzFob/DmB6SIbAoGBALw5JQXxRLihikp9owY4\nMVDi97T2Bw5OXedaIa5ZZGj+/nhPGGJ2a+u8406YuuFd1fC0ewLVod8H7173uD3y\nzg9/W62NkGdPfHsIjWiRDFu7tpL0l3OyVCOe/UNoNZupDBeXjmkj3/lLQCY9O9WZ\nu+XbF3CB9YIsODwRCHwXj8nQ\n-----END PRIVATE KEY-----\n",
+  "client_email": "vision-api-service-account@meal-plan-optimizer.iam.gserviceaccount.com",
+  "client_id": "107191649491483443151",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/vision-api-service-account%40meal-plan-optimizer.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

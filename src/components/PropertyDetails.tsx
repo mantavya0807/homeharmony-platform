@@ -5,6 +5,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { PaymentButton } from "./PaymentButton";
 import {
   Card,
   CardContent,
@@ -22,6 +23,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { VerificationDetails } from "./VerificationDetails";
 import { useSavedStatus } from "@/hooks/useSavedStatus";
 import { cn } from "@/lib/utils";
 
@@ -144,7 +146,21 @@ export default function PropertyDetails() {
   const [error, setError] = useState<string | null>(null);
   const [contactLoading, setContactLoading] = useState(false);
   const { isSaved, loading: savingLoading, toggleSave } = useSavedStatus(id!);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  // For demonstration, assume you have verification details stored with the property.
+  // In a real app, you would fetch these details (e.g., from the verification process).
+  const [verification, setVerification] = useState<{
+    is_verified: boolean;
+    leaseInfo?: {
+      originalRent?: number;
+      leaseTerm?: number | null;
+      startDate?: string;
+      endDate?: string;
+      rentDifferential?: number | null;
+    };
+  } | null>(null);
 
+  // Fetch property, user role, and verification details...
   useEffect(() => {
     const fetchProperty = async () => {
       try {
@@ -166,6 +182,17 @@ export default function PropertyDetails() {
 
         if (error) throw error;
         setProperty(data);
+        // For demo purposes, also set verification details (if available)
+        setVerification({
+          is_verified: data.is_verified,
+          leaseInfo: {
+            originalRent: data.original_lease_rent,
+            leaseTerm: data.original_lease_term,
+            startDate: data.sublease_from,
+            endDate: data.sublease_to,
+            rentDifferential: data.rent_differential,
+          },
+        });
       } catch (err: any) {
         console.error("Error fetching property:", err);
         setError(err.message || "Failed to load property details");
@@ -176,6 +203,23 @@ export default function PropertyDetails() {
 
     fetchProperty();
   }, [id]);
+
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        
+        setUserRole(profile?.role || null);
+      }
+    };
+
+    fetchUserRole();
+  }, []);
 
   const handleContactAgent = async () => {
     try {
@@ -269,6 +313,41 @@ export default function PropertyDetails() {
     return months;
   };
 
+  const renderPaymentSection = () => {
+    if (!property || userRole !== 'buyer') return null;
+
+    return (
+      <div className="mt-8 p-6 bg-card rounded-lg border">
+        <h3 className="text-lg font-semibold mb-4">Purchase this Property</h3>
+        <div className="space-y-4">
+          <div className="flex justify-between text-sm">
+            <span>Price</span>
+            <span className="font-semibold">${property.price.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span>Platform Fee (5%)</span>
+            <span className="font-semibold">${(property.price * 0.05).toLocaleString()}</span>
+          </div>
+          <div className="border-t pt-4 flex justify-between font-semibold">
+            <span>Total</span>
+            <span>${(property.price * 1.05).toLocaleString()}</span>
+          </div>
+          
+          <PaymentButton
+            propertyId={property.id}
+            sellerId={property.seller_id}
+            amount={property.price * 1.05}
+            onSuccess={() => navigate('/dashboard')}
+          />
+          
+          <p className="text-xs text-muted-foreground mt-4">
+            By clicking the button above, you agree to our terms of service and payment processing policies.
+          </p>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -291,9 +370,9 @@ export default function PropertyDetails() {
 
   const fullAddress = `${property.address}, ${property.city}, ${property.state} ${property.zip_code}`;
 
-  return (
+   return (
     <div className="min-h-screen bg-background">
-      {/* Image Gallery */}
+      {/* Image Gallery and header */}
       <div className="relative h-[50vh] bg-black">
         <Button
           variant="ghost"
@@ -303,7 +382,7 @@ export default function PropertyDetails() {
         >
           <ArrowLeft className="h-6 w-6" />
         </Button>
-        {property.images?.[0] ? (
+        {property?.images?.[0] ? (
           <img
             src={property.images[0]}
             alt={property.title}
@@ -322,21 +401,26 @@ export default function PropertyDetails() {
           <div className="space-y-6">
             {/* Title Section */}
             <div className="bg-card rounded-lg p-6 shadow-sm">
-              <h1 className="text-3xl font-bold mb-2">{property.title}</h1>
+              <h1 className="text-3xl font-bold mb-2">{property?.title}</h1>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <MapPin className="h-4 w-4" />
-                <span>
-                  {property.address}, {property.city}, {property.state}{" "}
-                  {property.zip_code}
-                </span>
+                <span>{fullAddress}</span>
               </div>
-              {property.housing_complex?.name && (
+              {property?.housing_complex?.name && (
                 <div className="flex items-center gap-2 text-muted-foreground mt-1">
                   <Home className="h-4 w-4" />
                   <span>Complex: {property.housing_complex.name}</span>
                 </div>
               )}
             </div>
+
+            {/* Verification Details Section */}
+            {verification && (
+              <VerificationDetails
+                isVerified={verification.is_verified}
+                leaseInfo={verification.leaseInfo}
+              />
+            )}
 
             {/* Property Features */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -534,6 +618,8 @@ export default function PropertyDetails() {
             </motion.button>
           </div>
         </div>
+        {renderPaymentSection()}
       </div>
     </div>
-  )};
+  );
+}

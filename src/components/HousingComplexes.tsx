@@ -400,7 +400,7 @@ export default function HousingComplexes() {
                 <RatingStars rating={complex.average_rating} />
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent> 
               {/* Display multiple images if available */}
               {complex.housing_complex_photos.length > 0 ? (
                 <ImageGallery photos={complex.housing_complex_photos.map(photo => photo.photo_url)} />
@@ -446,7 +446,7 @@ export default function HousingComplexes() {
                     aria-describedby="dialog-description"
                   >
                     {/* Add the sticky header */}
-                    <div className="sticky top-0 bg-background z-10 border-b pb-4">
+                    <div className="sticky top-0 bg-background z-10 border-b pb-4 mr-4">
                       <DialogHeader>
                         <DialogTitle className="text-2xl">{selectedComplex.name}</DialogTitle>
                         {/* Visually hidden description for accessibility */}
