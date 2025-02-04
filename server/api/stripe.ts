@@ -1,5 +1,3 @@
-// server/api/stripe.ts
-
 import express from 'express';
 import Stripe from 'stripe';
 import dotenv from 'dotenv';
@@ -34,7 +32,7 @@ router.post('/connect/account', async (req, res) => {
 
     console.log('Stripe account created:', account.id);
     res.json({ accountId: account.id });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating Stripe account:', error);
     res.status(500).json({ 
       error: 'Failed to create Stripe account',
@@ -62,7 +60,7 @@ router.post('/connect/account-session', async (req, res) => {
 
     console.log('Account session created with URL:', accountLink.url);
     res.json({ url: accountLink.url });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating account session:', error);
     res.status(500).json({ 
       error: 'Failed to create account session',
@@ -84,7 +82,7 @@ router.get('/account/:accountId/status', async (req, res) => {
       requirements: account.requirements,
       capabilities: account.capabilities
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error checking account status:', error);
     res.status(500).json({ error: error.message });
   }
@@ -104,7 +102,7 @@ router.post('/payment-intent', async (req, res) => {
 
     // First, verify the account status
     const account = await stripe.accounts.retrieve(connectAccountId);
-    if (!account.capabilities?.transfers === 'active') {
+    if (account.capabilities?.transfers !== 'active') {
       return res.status(400).json({
         error: 'Account not ready',
         details: 'The seller account has not completed the onboarding process'
@@ -128,7 +126,7 @@ router.post('/payment-intent', async (req, res) => {
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating payment intent:', error);
     res.status(500).json({ 
       error: 'Failed to create payment intent',

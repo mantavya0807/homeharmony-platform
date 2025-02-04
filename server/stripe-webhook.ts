@@ -1,10 +1,8 @@
-// server/stripe-webhook.ts
-
 import { buffer } from 'micro';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16',
+  apiVersion: '2025-01-27.acacia'
 });
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
@@ -36,7 +34,6 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    // Handle the event
     switch (event.type) {
       case 'account.updated':
         const account = event.data.object;
@@ -46,7 +43,6 @@ export default async function handler(req: any, res: any) {
         const paymentIntent = event.data.object;
         // Handle successful payment
         break;
-      // ... handle other event types
       default:
         console.log(`Unhandled event type ${event.type}`);
     }

@@ -1,14 +1,20 @@
 import { supabase } from "../integrations/supabase/client";
+
+interface Property {
+  click_count?: number;
+  last_click?: string;
+}
+
 export async function trackClick(propertyId: string) {
   if (!propertyId) {
     return { success: false, error: "Property ID is required" };
   }
 
   try {
-    // ✅ Check if property exists
+    // Check if property exists
     const { data: property, error: propertyError } = await supabase
       .from("properties")
-      .select("click_count")
+      .select("*")
       .eq("id", propertyId)
       .single();
 
@@ -22,16 +28,18 @@ export async function trackClick(propertyId: string) {
     }
 
     // Calculate new click count
-    const newClickCount = (property.click_count || 0) + 1;
+    const currentCount = (property as Property).click_count || 0;
+    const newClickCount = currentCount + 1;
+
     // Log the new click count
     console.log("New click count:", newClickCount);
 
-    // ✅ Update click count in properties table
+    // Update click count in properties table
     const { error: updateError } = await supabase
       .from("properties")
       .update({
         click_count: newClickCount,
-        last_click: new Date(),
+        last_click: new Date().toISOString(),
       })
       .eq("id", propertyId);
 

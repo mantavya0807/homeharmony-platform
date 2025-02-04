@@ -1,22 +1,19 @@
 import express from "express";
 import cors from "cors";
+import path from "path";
 import stripeRouter from "./api/stripe";
 import documentVerificationRouter from "./api/documentVerification";
 import geminiRouter from "./api/gemini";
-import propertyClicksRouter from "./api/propertyClicks"; // Import new router
-import { fileURLToPath } from "url";
-import { dirname } from "path";
+import propertyClicksRouter from "./api/propertyClicks";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
 const app = express();
+const __dirname = path.resolve();
 
 app.use(cors({
-  origin: process.env.VITE_PUBLIC_SUPABASE_URL||"http://localhost:8080",
+  origin: process.env.VITE_PUBLIC_SUPABASE_URL || "http://localhost:8080",
   credentials: true,
 }));
 
@@ -30,12 +27,14 @@ app.use("/api/verify-document", (req, res, next) => {
   next();
 }, documentVerificationRouter);
 app.use("/api/gemini", geminiRouter);
-app.use("/api/property-clicks", propertyClicksRouter); // New property click route
+app.use("/api/property-clicks", propertyClicksRouter);
 
 const PORT = process.env.PORT || 4000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
 export default app;
