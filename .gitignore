@@ -17,6 +17,7 @@ node_modules
 .env
 .env.*
 !.env.example
+.env.local
 
 # Testing
 coverage
@@ -60,3 +61,5 @@ keys/
 # Operating System
 .DS_Store
 Thumbs.db
+
+.vercel
