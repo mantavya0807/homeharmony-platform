@@ -16,7 +16,7 @@ const __dirname = dirname(__filename);
 const app = express();
 
 app.use(cors({
-  origin: "*",
+  origin: process.env.VITE_PUBLIC_SUPABASE_URL||"http://localhost:8080",
   credentials: true,
 }));
 
