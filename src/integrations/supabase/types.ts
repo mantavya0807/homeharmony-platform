@@ -6,11 +6,10 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type Database = {
+export interface Database {
   public: {
     Tables: {
       profiles: {
-        
         Row: {
           avatar_url: string | null
           created_at: string
@@ -55,6 +54,8 @@ export type Database = {
           title: string
           updated_at: string
           zip_code: string
+          click_count: number | null
+          last_click: string | null
         }
         Insert: {
           address: string
@@ -73,6 +74,8 @@ export type Database = {
           title: string
           updated_at?: string
           zip_code: string
+          click_count?: number | null
+          last_click?: string | null
         }
         Update: {
           address?: string
@@ -91,6 +94,8 @@ export type Database = {
           title?: string
           updated_at?: string
           zip_code?: string
+          click_count?: number | null
+          last_click?: string | null
         }
         Relationships: [
           {

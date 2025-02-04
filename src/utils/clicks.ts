@@ -1,9 +1,7 @@
-import { supabase } from "../integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 
-interface Property {
-  click_count?: number;
-  last_click?: string;
-}
+type Property = Database['public']['Tables']['properties']['Row'];
 
 export async function trackClick(propertyId: string) {
   if (!propertyId) {
@@ -28,7 +26,7 @@ export async function trackClick(propertyId: string) {
     }
 
     // Calculate new click count
-    const currentCount = (property as Property).click_count || 0;
+    const currentCount = property.click_count || 0;
     const newClickCount = currentCount + 1;
 
     // Log the new click count
