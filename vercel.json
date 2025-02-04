@@ -1,41 +1,17 @@
 {
   "version": 2,
-  "builds": [
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
     {
-      "src": "server/index.ts",
-      "use": "@vercel/node"
+      "source": "/api/:path*",
+      "destination": "/server/index.ts"
     },
     {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "buildCommand": "npm run build",
-        "outputDirectory": "dist"
-      }
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "server/index.ts"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ],
-  "env": {
-    "VITE_APP_URL": "https://sub-space.me",
-    "VITE_API_URL": "https://sub-space.me/api",
-    "STRIPE_SECRET_KEY": "@stripe_secret_key",
-    "STRIPE_WEBHOOK_SECRET": "@stripe_webhook_secret",
-    "STRIPE_PUBLISHABLE_KEY": "@stripe_publishable_key",
-    "SUPABASE_URL": "@supabase_url",
-    "SUPABASE_ANON_KEY": "@supabase_anon_key",
-    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key",
-    "GOOGLE_APPLICATION_CREDENTIALS": "@google_application_credentials",
-    "GEMINI_API_KEY": "@gemini_api_key"
-  },
   "headers": [
     {
       "source": "/api/(.*)",
@@ -54,5 +30,25 @@
         }
       ]
     }
-  ]
+  ],
+  "env": {
+    "VITE_APP_URL": "https://sub-space.me",
+    "VITE_API_URL": "https://sub-space.me/api",
+    "STRIPE_SECRET_KEY": "@stripe_secret_key",
+    "STRIPE_WEBHOOK_SECRET": "@stripe_webhook_secret",
+    "STRIPE_PUBLISHABLE_KEY": "@stripe_publishable_key", 
+    "SUPABASE_URL": "@supabase_url",
+    "SUPABASE_ANON_KEY": "@supabase_anon_key",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key",
+    "GOOGLE_APPLICATION_CREDENTIALS": "@google_application_credentials",
+    "GEMINI_API_KEY": "@gemini_api_key"
+  },
+  "functions": {
+    "server/index.ts": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
+  "cleanUrls": true,
+  "trailingSlash": false
 }
