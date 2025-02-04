@@ -8,27 +8,55 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+.pnp
+.pnp.js
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Testing
+coverage
+
+# Production
 dist
 dist-ssr
+build
 *.local
 
-# Editor directories and files
+# Misc
+.DS_Store
+*.pem
+.vscode
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local Netlify folder
+.netlify
+
+# Supabase
+.supabase
+
+# IDEs and editors
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-# Environment files
-.env
-.env.local
-.env.development
-.env.production
-.env.development.local
-.env.test.local
-.env.production.local
+# API keys 
+keys/
+*.json
+
+# Operating System
+.DS_Store
+Thumbs.db
