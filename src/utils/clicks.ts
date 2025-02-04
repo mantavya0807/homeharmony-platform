@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "../integrations/supabase/client";
 export async function trackClick(propertyId: string) {
   if (!propertyId) {
     return { success: false, error: "Property ID is required" };
