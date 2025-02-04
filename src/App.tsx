@@ -1,6 +1,6 @@
-import { Toaster } from "@/components/ui/Toaster";
-import { Toaster as Sonner } from "@/components/ui/Sonner";
-import { TooltipProvider } from "@/components/ui/TooltipProvider";
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
@@ -10,14 +10,12 @@ import Dashboard from "./pages/Dashboard";
 import SellerDashboard from "./pages/SellerDashboard";
 import { ChatInterface } from "./components/ChatInterface";
 import { Navigation } from "./components/Navigation";
-import { Analytics } from "@/components/Analytics";
 import { useEffect, useState } from "react";
 import { supabase } from "./integrations/supabase/client";
 import PropertyDetails from "./components/PropertyDetails";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import HousingComplexes from "./components/HousingComplexes";
 import SavedProperties from "./pages/SavedProperties";
-
 const queryClient = new QueryClient();
 
 export default function App() {
@@ -146,7 +144,6 @@ export default function App() {
                   }
                 />
               </Routes>
-              <Analytics />
             </div>
           </BrowserRouter>
         </TooltipProvider>

@@ -1,6 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "esModuleInterop": true,
@@ -10,6 +12,7 @@
     "outDir": "./dist",
     "rootDir": ".",
     "baseUrl": ".",
+    "jsx": "react-jsx",
     "paths": {
       "@/*": ["./src/*"],
       "@/components/*": ["./src/components/*"],
@@ -21,17 +24,24 @@
       "@/types/*": ["./src/types/*"],
       "@/api/*": ["./src/api/*"],
       "@/styles/*": ["./src/styles/*"],
-      "@/assets/*": ["./src/assets/*"],
+      "@/assets/*": ["./src/assets/*"]
     },
     "allowJs": true,
     "resolveJsonModule": true,
-    "types": ["node"],
+    "types": ["node", "react", "react-dom"],
     "typeRoots": ["./node_modules/@types"],
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "isolatedModules": true
   },
   "include": [
     "server/**/*",
-    "src/utils/**/*"
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.js",
+    "src/**/*.jsx"
   ],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    { "path": "./tsconfig.node.json" }
+  ]
 }
