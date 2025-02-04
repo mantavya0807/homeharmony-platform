@@ -12,8 +12,23 @@ dotenv.config();
 const app = express();
 const __dirname = path.resolve();
 
+// Define allowed origins. You can include both your Supabase URL and your local dev URL.
+const allowedOrigins = [
+  process.env.VITE_PUBLIC_SUPABASE_URL || process.env.PROCESS_ID,
+  "http://localhost:8080",
+];
+
+// Use CORS with a custom origin callback
 app.use(cors({
-  origin: process.env.VITE_PUBLIC_SUPABASE_URL || "http://localhost:8080",
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    } else {
+      return callback(new Error("Not allowed by CORS: " + origin));
+    }
+  },
   credentials: true,
 }));
 

@@ -1,10 +1,8 @@
-// src/utils/stripe.ts
-
 import { loadStripe } from '@stripe/stripe-js';
 
-const API_URL = 'http://localhost:4000'; // Point to Express server port
+const API_URL = 'http://localhost:4000'; // Express server URL
 
-// Initialize Stripe with the publishable key from environment variables
+// Initialize Stripe with the publishable key from your environment variables
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 /**
@@ -75,7 +73,7 @@ export const createPaymentIntent = async (amount: number, connectAccountId: stri
       credentials: 'include',
       body: JSON.stringify({
         amount: Math.round(amount * 100), // Convert to cents and round
-        connectAccountId
+        connectAccountId,
       }),
     });
 
