@@ -1,19 +1,23 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ],
   "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "./dist/server",
+    "rootDir": "./server",
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     },
-    "noImplicitAny": false,
-    "noUnusedParameters": false,
-    "skipLibCheck": true,
+    "typeRoots": ["./node_modules/@types"],
+    "resolveJsonModule": true,
     "allowJs": true,
-    "noUnusedLocals": false,
-    "strictNullChecks": false
-  }
+    "noImplicitAny": false
+  },
+  "include": ["server/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

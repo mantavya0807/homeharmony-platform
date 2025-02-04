@@ -1,54 +1,27 @@
 {
   "version": 2,
-  "buildCommand": "npm install && npm run build",
-  "installCommand": "npm install",
-  "outputDirectory": "dist",
-  "framework": "vite",
-  "rewrites": [
+  "builds": [
     {
-      "source": "/api/:path*",
-      "destination": "/api/index.js"
+      "src": "server/index.ts",
+      "use": "@vercel/node"
     },
     {
-      "source": "/(.*)",
-      "destination": "/"
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": { "zeroConfig": true }
     }
   ],
-  "functions": {
-    "api/**/*.js": {
-      "runtime": "@vercel/node@2.0.0",
-      "memory": 1024,
-      "maxDuration": 10
-    }
-  },
-  "headers": [
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-        }
-      ]
+      "src": "/api/(.*)",
+      "dest": "server/index.ts"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
     }
   ],
   "env": {
-    "VITE_APP_URL": "https://sub-space.me",
-    "VITE_API_URL": "https://sub-space.me/api",
     "NODE_ENV": "production"
-  },
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build"
-    }
-  ]
+  }
 }
