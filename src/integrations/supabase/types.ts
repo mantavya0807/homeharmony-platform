@@ -54,8 +54,7 @@ export interface Database {
           title: string
           updated_at: string
           zip_code: string
-          click_count: number | null
-          last_click: string | null
+
         }
         Insert: {
           address: string
@@ -74,8 +73,6 @@ export interface Database {
           title: string
           updated_at?: string
           zip_code: string
-          click_count?: number | null
-          last_click?: string | null
         }
         Update: {
           address?: string
@@ -94,8 +91,6 @@ export interface Database {
           title?: string
           updated_at?: string
           zip_code?: string
-          click_count?: number | null
-          last_click?: string | null
         }
         Relationships: [
           {

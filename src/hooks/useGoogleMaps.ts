@@ -1,13 +1,9 @@
 import { useState, useEffect } from 'react';
 
-const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY';
-
-// Type declaration for window object with google maps
 declare global {
   interface Window {
-    google: {
-      maps: any;
-    };
+    google: any;
+    __googleMapsCallback?: () => void;
   }
 }
 
@@ -16,29 +12,34 @@ export function useGoogleMaps() {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    // If the script is already loaded, don't load it again
+    // If already loaded, set the flag and return early.
     if (window.google?.maps) {
       setIsLoaded(true);
       return;
     }
 
+    const callbackName = '__googleMapsCallback';
+    window[callbackName] = () => {
+      setIsLoaded(true);
+      delete window[callbackName];
+    };
+
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I&libraries=places`;
+    // Use one consistent API key here
+    const apiKey = 'AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker&callback=${callbackName}`;
     script.async = true;
     script.defer = true;
 
-    const handleLoad = () => setIsLoaded(true);
-    const handleError = () => setError(new Error('Failed to load Google Maps script'));
-
-    script.addEventListener('load', handleLoad);
-    script.addEventListener('error', handleError);
+    script.onerror = () => {
+      setError(new Error('Failed to load Google Maps script'));
+      delete window[callbackName];
+    };
 
     document.head.appendChild(script);
 
     return () => {
-      script.removeEventListener('load', handleLoad);
-      script.removeEventListener('error', handleError);
-      // Don't remove the script from the DOM as it might be used by other components
+      delete window[callbackName];
     };
   }, []);
 

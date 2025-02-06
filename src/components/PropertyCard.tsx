@@ -1,13 +1,14 @@
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Bed, Bath, Square, Heart, CheckCircle, AlertCircle } from "lucide-react";
+import { MapPin, Bed, Bath, Square, Heart, CheckCircle, AlertCircle, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { trackPropertyClick } from '@/utils/trackPropertyClick';
 
 interface PropertyCardProps {
   id: string;
@@ -21,6 +22,7 @@ interface PropertyCardProps {
   sublease_from?: string;
   sublease_to?: string;
   is_verified?: boolean;
+  views?: number;
 }
 
 export function PropertyCard({
@@ -35,6 +37,7 @@ export function PropertyCard({
   sublease_from,
   sublease_to,
   is_verified = false,
+  views,
 }: PropertyCardProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -135,11 +138,22 @@ export function PropertyCard({
 
   const subleaseDuration = getSubLeaseDuration();
 
+  const handleCardClick = async () => {
+    try {
+      await trackPropertyClick(id);
+      navigate(`/properties/${id}`);
+    } catch (error) {
+      console.error('Error handling property click:', error);
+      // Still navigate even if tracking fails
+      navigate(`/properties/${id}`);
+    }
+  };
+
   return (
     <TooltipProvider>
       <Card 
-        className="overflow-hidden transition-all duration-300 hover:shadow-lg animate-fadeIn cursor-pointer group relative"
-        onClick={() => navigate(`/properties/${id}`)}
+        className="group overflow-hidden transition-all duration-300 hover:shadow-lg animate-fadeIn cursor-pointer relative"
+        onClick={handleCardClick}
       >
         <CardHeader className="p-0">
           <div className="relative h-48">
@@ -177,25 +191,19 @@ export function PropertyCard({
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold line-clamp-1">{title}</h3>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className={cn(
-                  "flex-shrink-0",
-                  is_verified ? "text-blue-500" : "text-red-500"
-                )}>
-                  {is_verified ? (
-                    <CheckCircle className="h-5 w-5" />
-                  ) : (
-                    <AlertCircle className="h-5 w-5" />
-                  )}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{is_verified ? "Verified Property" : "Unverified Property"}</p>
-              </TooltipContent>
-            </Tooltip>
+            {views !== undefined && (
+              <motion.div 
+                className="flex items-center gap-1 text-muted-foreground text-sm"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                <Eye className="h-4 w-4" />
+                {views} views
+              </motion.div>
+            )}
           </div>
           <div className="flex items-center gap-1 mt-2 text-muted-foreground">
             <MapPin size={16} />

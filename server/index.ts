@@ -12,22 +12,42 @@ dotenv.config();
 const app = express();
 const __dirname = path.resolve();
 
+// Define allowed origins. You can include both your Supabase URL and your local dev URL.
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:8080',
+  'https://sub-space.me',
+];
+
+// Use CORS with a custom origin callback
 app.use(cors({
-  origin: process.env.VITE_PUBLIC_SUPABASE_URL || "http://localhost:8080",
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Mount API routes
-app.use("/api/stripe", stripeRouter);
-app.use("/api/verify-document", (req, res, next) => {
-  console.log("[Server] Request URL:", req.url);
-  next();
-}, documentVerificationRouter);
-app.use("/api/gemini", geminiRouter);
 app.use("/api/property-clicks", propertyClicksRouter);
+app.use("/api/stripe", stripeRouter);
+app.use("/api/verify-document", documentVerificationRouter);
+app.use("/api/gemini", geminiRouter);
+
+// Error handling
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: err.message
+  });
+});
 
 const PORT = process.env.PORT || 4000;
 
