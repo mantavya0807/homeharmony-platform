@@ -38,6 +38,7 @@ export interface Database {
       }
       properties: {
         Row: {
+          roomTag: any
           address: string
           bathrooms: number
           bedrooms: number

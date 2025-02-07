@@ -1,3 +1,4 @@
+// App.tsx
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,24 +18,28 @@ import PropertyDetails from "./components/PropertyDetails";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import HousingComplexes from "./components/HousingComplexes";
 import SavedProperties from "./pages/SavedProperties";
+import ProfilePage from "./components/ProfilePage";
+import UserReviews from "./components/UserReview";
+import StripeConnect from "./components/StripeConnect";
+import { SellerProfile } from "./components/SellerProfile";
+import { SellerReviews } from "./components/SellerReviews";
+import { BuyerReviews } from "./components/BuyerReviews";
 
 const queryClient = new QueryClient();
 
 export default function App() {
-  const [session, setSession] = useState(null);
-  const [userRole, setUserRole] = useState(null);
+  const [session, setSession] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
-        // Get user profile
         supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
           .single()
           .then(({ data }) => {
             setUserRole(data?.role || null);
@@ -44,17 +49,13 @@ export default function App() {
         setLoading(false);
       }
     });
-
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
-      
       if (newSession) {
-        // Get user profile when auth state changes
         supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', newSession.user.id)
+          .from("profiles")
+          .select("role")
+          .eq("id", newSession.user.id)
           .single()
           .then(({ data }) => {
             setUserRole(data?.role || null);
@@ -63,7 +64,6 @@ export default function App() {
         setUserRole(null);
       }
     });
-
     return () => {
       subscription.unsubscribe();
     };
@@ -85,7 +85,7 @@ export default function App() {
                   path="/auth"
                   element={
                     session ? (
-                      <Navigate to={userRole === 'seller' ? '/seller-dashboard' : '/dashboard'} />
+                      <Navigate to={userRole === "seller" ? "/seller-dashboard" : "/dashboard"} />
                     ) : (
                       <Auth />
                     )
@@ -103,26 +103,8 @@ export default function App() {
                     )
                   }
                 />
-                <Route
-                  path="/saved"
-                  element={
-                    !session ? (
-                      <Navigate to="/auth" />
-                    ) : (
-                      <SavedProperties />
-                    )
-                  }
-                />
-                <Route
-                  path="/chat"
-                  element={
-                    !session ? (
-                      <Navigate to="/auth" />
-                    ) : (
-                      <ChatInterface />
-                    )
-                  }
-                />
+                <Route path="/saved" element={!session ? <Navigate to="/auth" /> : <SavedProperties />} />
+                <Route path="/chat" element={!session ? <Navigate to="/auth" /> : <ChatInterface />} />
                 <Route
                   path="/seller-dashboard"
                   element={
@@ -135,13 +117,49 @@ export default function App() {
                     )
                   }
                 />
+                <Route path="/properties/:id" element={!session ? <Navigate to="/auth" /> : <PropertyDetails />} />
+                <Route path="/profile" element={!session ? <Navigate to="/auth" /> : <ProfilePage />} />
                 <Route
-                  path="/properties/:id"
+                  path="/reviews/:userId"
+                  element={!session ? <Navigate to="/auth" /> : <UserReviews />}
+                />
+                <Route
+                  path="/stripe-connect"
                   element={
                     !session ? (
                       <Navigate to="/auth" />
+                    ) : userRole !== "seller" ? (
+                      <Navigate to="/dashboard" />
                     ) : (
-                      <PropertyDetails />
+                      <StripeConnect />
+                    )
+                  }
+                />
+                {/* Seller profile page */}
+                <Route path="/seller/:sellerId" element={!session ? <Navigate to="/auth" /> : <SellerProfile />} />
+                {/* Seller reviews page (for sellers to see reviews received) */}
+                <Route
+                  path="/reviews"
+                  element={
+                    !session ? (
+                      <Navigate to="/auth" />
+                    ) : userRole !== "seller" ? (
+                      <Navigate to="/dashboard" />
+                    ) : (
+                      <SellerReviews />
+                    )
+                  }
+                />
+                {/* Buyer reviews page (for buyers to see the reviews they have given) */}
+                <Route
+                  path="/buyer-reviews"
+                  element={
+                    !session ? (
+                      <Navigate to="/auth" />
+                    ) : userRole !== "buyer" ? (
+                      <Navigate to="/dashboard" />
+                    ) : (
+                      <BuyerReviews />
                     )
                   }
                 />

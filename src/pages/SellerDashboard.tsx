@@ -54,6 +54,7 @@ interface MediaFile {
   file: File;
   preview: string;
   type: "image" | "video";
+  room: string;
 }
 
 export default function SellerDashboard() {
@@ -216,11 +217,20 @@ export default function SellerDashboard() {
             file,
             preview: reader.result as string,
             type,
+            room: "", // default: user must select the room type
           },
         ]);
         console.log(`Added media file: ${file.name}`);
       };
       reader.readAsDataURL(file);
+    });
+  };
+
+  const updateMediaFileRoom = (index: number, room: string) => {
+    setMediaFiles((prev) => {
+      const updated = [...prev];
+      updated[index].room = room;
+      return updated;
     });
   };
 
@@ -233,6 +243,7 @@ export default function SellerDashboard() {
   const uploadMedia = async (propertyId: string) => {
     const uploadPromises = mediaFiles.map(async (mediaFile, index) => {
       try {
+        const roomSegment = mediaFile.room ? `-${mediaFile.room.replace(/\s+/g, "_")}` : "";
         const fileExt = mediaFile.file.name.split(".").pop();
         const fileName = `${propertyId}/${Date.now()}-${index}.${fileExt}`;
         const { data: existingFiles } = await supabase.storage
@@ -698,14 +709,26 @@ const { error: updateError } = await supabase
                         >
                           <X className="h-4 w-4" />
                         </button>
+                        {/* ── New: Room Selection Dropdown ── */}
+                        <select
+                          value={file.room}
+                          onChange={(e) => updateMediaFileRoom(index, e.target.value)}
+                          className="mt-1 block w-full text-sm border rounded"
+                        >
+                          <option value="">Select Room</option>
+                          <option value="bedroom">Bedroom</option>
+                          <option value="living room">Living Room</option>
+                          <option value="bathroom">Bathroom</option>
+                          <option value="kitchen">Kitchen</option>
+                          <option value="floorplan">Floorplan</option>
+                          <option value="other">Other</option>
+                        </select>
                       </div>
                     ))}
                     <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg border-muted-foreground/25 hover:border-muted-foreground/50 cursor-pointer transition-colors">
                       <div className="flex flex-col items-center justify-center">
                         <Upload className="h-6 w-6 mb-2 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">
-                          Upload
-                        </span>
+                        <span className="text-xs text-muted-foreground">Upload</span>
                       </div>
                       <input
                         type="file"
@@ -1047,6 +1070,7 @@ const { error: updateError } = await supabase
                 beds={property.bedrooms}
                 baths={property.bathrooms}
                 sqft={property.square_feet}
+                roomTag={property.roomTag}
                 imageUrl={
                   property.images?.[0] ||
                   "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"

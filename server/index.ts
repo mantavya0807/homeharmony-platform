@@ -17,6 +17,7 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:8080',
   'https://sub-space.me',
+  '*'
 ];
 
 // Use CORS with a custom origin callback

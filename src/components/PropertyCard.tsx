@@ -1,16 +1,30 @@
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Bed, Bath, Square, Heart, CheckCircle, AlertCircle, Eye } from "lucide-react";
+import {
+  MapPin,
+  Bed,
+  Bath,
+  Square,
+  Heart,
+  CheckCircle,
+  Eye,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { trackPropertyClick } from '@/utils/trackPropertyClick';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { trackPropertyClick } from "@/utils/trackPropertyClick";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-interface PropertyCardProps {
+interface PropertyCardProps {s
   id: string;
   title: string;
   price: number;
@@ -19,10 +33,15 @@ interface PropertyCardProps {
   baths: number;
   sqft: number;
   imageUrl: string;
+  roomTag?: string; // NEW: optional room tag for the image
   sublease_from?: string;
   sublease_to?: string;
   is_verified?: boolean;
   views?: number;
+  // Seller info
+  sellerId?: string;
+  sellerName?: string;
+  sellerAvatarUrl?: string;
 }
 
 export function PropertyCard({
@@ -34,10 +53,14 @@ export function PropertyCard({
   baths,
   sqft,
   imageUrl,
+  roomTag, // new prop
   sublease_from,
   sublease_to,
   is_verified = false,
   views,
+  sellerId,
+  sellerName,
+  sellerAvatarUrl,
 }: PropertyCardProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -50,22 +73,24 @@ export function PropertyCard({
 
   const checkIfLiked = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         setIsLoading(false);
         return;
       }
 
       const { data: savedProperty } = await supabase
-        .from('saved_properties')
+        .from("saved_properties")
         .select()
-        .eq('user_id', user.id)
-        .eq('property_id', id)
+        .eq("user_id", user.id)
+        .eq("property_id", id)
         .single();
 
       setIsLiked(!!savedProperty);
     } catch (error) {
-      console.error('Error checking saved status:', error);
+      console.error("Error checking saved status:", error);
     } finally {
       setIsLoading(false);
     }
@@ -75,7 +100,9 @@ export function PropertyCard({
     e.stopPropagation();
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         toast({
           title: "Authentication required",
@@ -88,25 +115,23 @@ export function PropertyCard({
 
       if (isLiked) {
         const { error } = await supabase
-          .from('saved_properties')
+          .from("saved_properties")
           .delete()
-          .eq('user_id', user.id)
-          .eq('property_id', id);
+          .eq("user_id", user.id)
+          .eq("property_id", id);
 
         if (error) throw error;
         setIsLiked(false);
-        
+
         toast({
           title: "Property removed from saved list",
           description: "You can always save it again later",
         });
       } else {
-        const { error } = await supabase
-          .from('saved_properties')
-          .insert({
-            user_id: user.id,
-            property_id: id,
-          });
+        const { error } = await supabase.from("saved_properties").insert({
+          user_id: user.id,
+          property_id: id,
+        });
 
         if (error) throw error;
         setIsLiked(true);
@@ -117,7 +142,7 @@ export function PropertyCard({
         });
       }
     } catch (error) {
-      console.error('Error updating saved status:', error);
+      console.error("Error updating saved status:", error);
       toast({
         title: "Error",
         description: "Failed to update saved status",
@@ -128,11 +153,12 @@ export function PropertyCard({
 
   const getSubLeaseDuration = () => {
     if (!sublease_from || !sublease_to) return null;
-    
+
     const start = new Date(sublease_from);
     const end = new Date(sublease_to);
-    const months = (end.getFullYear() - start.getFullYear()) * 12 + 
-                  (end.getMonth() - start.getMonth());
+    const months =
+      (end.getFullYear() - start.getFullYear()) * 12 +
+      (end.getMonth() - start.getMonth());
     return months;
   };
 
@@ -143,15 +169,23 @@ export function PropertyCard({
       await trackPropertyClick(id);
       navigate(`/properties/${id}`);
     } catch (error) {
-      console.error('Error handling property click:', error);
-      // Still navigate even if tracking fails
+      console.error("Error handling property click:", error);
+      // Navigate even if tracking fails
       navigate(`/properties/${id}`);
+    }
+  };
+
+  // Navigate to the seller’s page
+  const handleSellerClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // so it doesn’t trigger the property click
+    if (sellerId) {
+      navigate(`/seller/${sellerId}`);
     }
   };
 
   return (
     <TooltipProvider>
-      <Card 
+      <Card
         className="group overflow-hidden transition-all duration-300 hover:shadow-lg animate-fadeIn cursor-pointer relative"
         onClick={handleCardClick}
       >
@@ -162,9 +196,11 @@ export function PropertyCard({
               alt={title}
               className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-110"
             />
+            {/* Price Badge (top right) */}
             <Badge className="absolute top-2 right-2 bg-primary text-white px-3 py-1 rounded-full shadow-md">
               ${price.toLocaleString()}
             </Badge>
+            {/* Like Button (top left) */}
             <AnimatePresence>
               <motion.button
                 className={cn(
@@ -188,13 +224,19 @@ export function PropertyCard({
                 />
               </motion.button>
             </AnimatePresence>
+            {/* NEW: Room Tag Badge (bottom left) */}
+            {roomTag && (
+              <Badge className="absolute bottom-2 left-2 bg-secondary text-white px-2 py-1 text-xs rounded shadow-md">
+                {roomTag}
+              </Badge>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold line-clamp-1">{title}</h3>
             {views !== undefined && (
-              <motion.div 
+              <motion.div
                 className="flex items-center gap-1 text-muted-foreground text-sm"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -205,21 +247,51 @@ export function PropertyCard({
               </motion.div>
             )}
           </div>
+
+          {/* Location row */}
           <div className="flex items-center gap-1 mt-2 text-muted-foreground">
             <MapPin size={16} />
             <span className="text-sm line-clamp-1">{location}</span>
           </div>
+
+          {/* Sublease info */}
           {subleaseDuration && (
             <div className="mb-2">
               <Badge variant="secondary">
-                {subleaseDuration} month{subleaseDuration !== 1 ? 's' : ''} sublease
+                {subleaseDuration} month{subleaseDuration !== 1 ? "s" : ""} sublease
               </Badge>
               <p className="text-xs text-muted-foreground mt-1">
-                {new Date(sublease_from).toLocaleDateString()} - {new Date(sublease_to).toLocaleDateString()}
+                {new Date(sublease_from!).toLocaleDateString()} -{" "}
+                {new Date(sublease_to!).toLocaleDateString()}
               </p>
             </div>
           )}
+
+          {/* Seller info + verification */}
+          {sellerId && sellerName && (
+            <div
+              className="mt-3 flex items-center gap-2 cursor-pointer"
+              onClick={handleSellerClick}
+            >
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={sellerAvatarUrl || ""} alt={sellerName} />
+                <AvatarFallback>
+                  {sellerName.length ? sellerName.charAt(0) : "?"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex items-center gap-1">
+                <span className="text-sm font-medium">{sellerName}</span>
+                {is_verified && (
+                  <CheckCircle
+                    className="h-4 w-4 text-blue-500"
+                    title="Verified Seller"
+                  />
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
+
         <CardFooter className="grid grid-cols-3 gap-4 p-4 border-t">
           <div className="flex items-center gap-1">
             <Bed size={16} />

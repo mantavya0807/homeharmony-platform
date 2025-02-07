@@ -20,6 +20,20 @@ import type { Database } from "@/integrations/supabase/types";
 import AddHousingComplex from "@/components/AddHousingComplex";
 import {AddressInput} from "@/components/AddressInput"; // Import your existing AddressInput component
 
+const VERIFICATION_API_URL = "http://localhost:4000/api/verify-document";
+
+interface VerificationResult {
+  is_verified: boolean;
+  score?: number;
+  leaseInfo?: {
+    originalRent?: number;
+    rentDifferential?: number;
+    leaseTerm?: string;
+    startDate?: string;
+    endDate?: string;
+  };
+}
+
 type Property = Database["public"]["Tables"]["properties"]["Row"];
 type HousingComplex = Database["public"]["Tables"]["housing_complexes"]["Row"];
 
@@ -28,6 +42,15 @@ interface EditPropertyDialogProps {
   onClose: () => void;
   property: Property | null;
   onUpdate: (updatedProperty: Property) => void;
+}
+
+// Add new interface for form state
+interface PropertyForm extends Omit<Property, 'price' | 'bedrooms' | 'bathrooms' | 'square_feet'> {
+  price: string;
+  bedrooms: string;
+  bathrooms: string;
+  square_feet: string;
+  verification_document?: File | null;
 }
 
 interface MediaFile {
@@ -64,6 +87,7 @@ export const EditPropertyDialog = ({
 
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [existingMedia, setExistingMedia] = useState<string[]>([]);
+  const [verificationDocument, setVerificationDocument] = useState<File | null>(null);
 
   useEffect(() => {
     const fetchHousingComplexes = async () => {
@@ -126,67 +150,210 @@ export const EditPropertyDialog = ({
     }
   }, [isOpen, property, toast]);
 
-  const handleEditProperty = async () => {
-    if (!property) return;
+  const handleVerificationUpload = async (file: File) => {
+    if (!property?.id) return;
 
     try {
-      setLoading(true);
+      // Upload to Supabase first
+      const timestamp = Date.now();
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const filePath = `${property.id}/${timestamp}-${sanitizedFileName}`;
 
-      // Update text details of the property
-      const { error: updateError } = await supabase
+      const { error: uploadError } = await supabase.storage
+        .from("property-verifications")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          contentType: file.type,
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from("property-verifications")
+        .getPublicUrl(filePath);
+
+      // Update with document URL first
+      await supabase
         .from("properties")
         .update({
-          ...updatedProperty,
-          price: parseFloat(updatedProperty.price),
-          bedrooms: parseInt(updatedProperty.bedrooms),
-          bathrooms: parseInt(updatedProperty.bathrooms),
-          square_feet: parseInt(updatedProperty.square_feet),
+          verification_document_url: publicUrlData.publicUrl,
+          is_verified: false,
         })
         .eq("id", property.id);
 
-      if (updateError) throw updateError;
+      // Try verification service, but don't block on failure
+      try {
+        const propertyDetails = {
+          address: updatedProperty.address,
+          city: updatedProperty.city,
+          state: updatedProperty.state,
+          zip_code: updatedProperty.zip_code,
+          price: updatedProperty.price,
+        };
 
-      // Upload new media files
-      const uploadedUrls = await uploadMedia(property.id);
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("propertyDetails", JSON.stringify(propertyDetails));
 
-      // Final list of images (existing + new uploads)
-      const updatedImages = [...existingMedia, ...uploadedUrls];
+        const response = await fetch(VERIFICATION_API_URL, {
+          method: "POST",
+          body: formData,
+        });
 
-      // Update the property with the new images
-      const { error: mediaUpdateError } = await supabase
+        if (!response.ok) {
+          throw new Error(`Verification service error: ${response.status}`);
+        }
+
+        const verificationResult: VerificationResult = await response.json();
+
+        // Update verification status if service succeeded
+        await supabase
+          .from("properties")
+          .update({
+            is_verified: verificationResult.is_verified,
+            verified_at: verificationResult.is_verified ? new Date().toISOString() : null,
+            original_lease_rent: verificationResult.leaseInfo?.originalRent || null,
+            rent_differential: verificationResult.leaseInfo?.rentDifferential || null,
+            original_lease_term: verificationResult.leaseInfo?.leaseTerm || null,
+            sublease_from: verificationResult.leaseInfo?.startDate
+              ? new Date(verificationResult.leaseInfo.startDate).toISOString()
+              : null,
+            sublease_to: verificationResult.leaseInfo?.endDate
+              ? new Date(verificationResult.leaseInfo.endDate).toISOString()
+              : null,
+          })
+          .eq("id", property.id);
+
+        toast({
+          title: "Verification Complete",
+          description: verificationResult.is_verified
+            ? "Document verified successfully"
+            : "Document requires manual verification",
+          variant: verificationResult.is_verified ? "default" : "warning",
+        });
+
+      } catch (verifyError) {
+        console.error("Verification service error:", verifyError);
+        toast({
+          title: "Verification Service Unavailable",
+          description: "Document uploaded but verification is currently unavailable",
+          variant: "warning",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error handling document:", error);
+      toast({
+        title: "Error",
+        description: "Failed to upload verification document",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const handleEditProperty = async () => {
+    // Validate property existence and ID
+    if (!property?.id) {
+      toast({
+        title: "Error",
+        description: "Invalid property ID",
+        variant: "destructive",
+      });
+      return;
+    }
+  
+    try {
+      setLoading(true);
+  
+      // Handle verification document if provided
+      if (verificationDocument) {
+        await handleVerificationUpload(verificationDocument);
+      }
+  
+      // Validate housing_complex_id
+      let validatedHousingComplexId: string | null = null;
+      if (updatedProperty.housing_complex_id) {
+        // Basic UUID check (more robust validation might be needed)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(updatedProperty.housing_complex_id)) {
+          validatedHousingComplexId = updatedProperty.housing_complex_id;
+        } else {
+          toast({
+            title: "Error",
+            description: "Invalid Housing Complex ID",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+      }
+  
+      // Create update payload with proper type checking
+      const updatePayload = {
+        title: updatedProperty.title,
+        description: updatedProperty.description,
+        price: parseFloat(updatedProperty.price) || 0,
+        bedrooms: parseInt(updatedProperty.bedrooms) || 0,
+        bathrooms: parseInt(updatedProperty.bathrooms) || 0,
+        square_feet: parseInt(updatedProperty.square_feet) || 0,
+        address: updatedProperty.address,
+        city: updatedProperty.city,
+        state: updatedProperty.state,
+        zip_code: updatedProperty.zip_code,
+        property_type: updatedProperty.property_type,
+        housing_complex_id: validatedHousingComplexId, // Use validated ID
+      };
+  
+      // Update property details
+      const { error: updateError } = await supabase
         .from("properties")
-        .update({ images: updatedImages })
+        .update(updatePayload)
         .eq("id", property.id);
-
-      if (mediaUpdateError) throw mediaUpdateError;
-
+  
+      if (updateError) throw updateError;
+  
+      // Handle media updates
+      if (mediaFiles.length > 0) {
+        const uploadedUrls = await uploadMedia(property.id);
+        const updatedImages = [...existingMedia, ...uploadedUrls];
+  
+        const { error: mediaUpdateError } = await supabase
+          .from("properties")
+          .update({ images: updatedImages })
+          .eq("id", property.id);
+  
+        if (mediaUpdateError) throw mediaUpdateError;
+      }
+  
+      // Fetch updated property data
+      const { data: updatedPropertyData, error: fetchError } = await supabase
+        .from("properties")
+        .select("*")
+        .eq("id", property.id)
+        .single();
+  
+      if (fetchError) throw fetchError;
+  
       toast({
         title: "Success",
         description: "Property updated successfully",
       });
-
-      // Update parent state
-      onUpdate({
-        ...property,
-        ...updatedProperty,
-        price: parseFloat(updatedProperty.price),
-        bedrooms: parseInt(updatedProperty.bedrooms),
-        bathrooms: parseInt(updatedProperty.bathrooms),
-        square_feet: parseInt(updatedProperty.square_feet),
-        images: updatedImages,
-      });
-      onClose(); // Close the dialog
+  
+      onUpdate(updatedPropertyData);
+      onClose();
     } catch (error: any) {
       console.error("Error updating property:", error);
       toast({
         title: "Error",
-        description: "Failed to update property. Please try again later.",
+        description: error.message || "Failed to update property",
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
   };
+  
 
   const uploadMedia = async (propertyId: string) => {
     const uploadPromises = mediaFiles.map(async (mediaFile, index) => {
@@ -260,6 +427,13 @@ export const EditPropertyDialog = ({
     setHousingComplexes((prev) => [...prev, newComplex]);
     setUpdatedProperty((prev) => ({ ...prev, housing_complex_id: newComplex.id }));
     setAddComplexOpen(false); // Close the AddHousingComplex dialog
+  };
+
+  // Add verification document handler
+  const handleVerificationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) {
+      setVerificationDocument(e.target.files[0]);
+    }
   };
 
   return (
@@ -497,6 +671,37 @@ export const EditPropertyDialog = ({
               </div>
             </div>
 
+            {/* Add verification document input after other form fields */}
+            <div className="space-y-2">
+              <Label htmlFor="verification_document">
+                Verification Document (Optional)
+              </Label>
+              <input
+                type="file"
+                id="verification_document"
+                accept="image/*,application/pdf"
+                onChange={handleVerificationChange}
+                className="border rounded p-2 w-full"
+              />
+              {verificationDocument && (
+                <div className="mt-2 flex items-center space-x-2">
+                  {verificationDocument.type === "application/pdf" ? (
+                    <ImageIcon className="h-6 w-6 text-red-500" />
+                  ) : (
+                    <img
+                      src={URL.createObjectURL(verificationDocument)}
+                      alt="Verification Preview"
+                      className="h-6 w-6 object-cover"
+                    />
+                  )}
+                  <span>{verificationDocument.name}</span>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Upload an image or PDF for property verification.
+              </p>
+            </div>
+
             {/* Submit Button */}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? (
@@ -519,4 +724,4 @@ export const EditPropertyDialog = ({
       />
     </>
   );
-};
+}

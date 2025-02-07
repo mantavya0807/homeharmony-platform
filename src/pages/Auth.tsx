@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2, Eye, EyeOff } from "lucide-react";
+import ProfileSetup from "./ProfileSetup";
 
-type ViewType = "role" | "login" | "register" | "forgot-password" | "update-password";
+type ViewType = "role" | "login" | "register" | "forgot-password" | "update-password" | "profile-setup";
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<ViewType>(initialView);
   const [role, setRole] = useState<"buyer" | "seller">("buyer");
+  const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
   
   // Form states
   const [email, setEmail] = useState("");
@@ -157,7 +159,7 @@ export default function Auth() {
     e.preventDefault();
     setLoading(true);
     setError("");
-
+  
     try {
       if (!fullName.trim()) {
         throw new Error("Full name is required");
@@ -168,9 +170,9 @@ export default function Auth() {
       if (password.length < 6) {
         throw new Error("Password must be at least 6 characters");
       }
-
+  
       await supabase.auth.signOut();
-
+  
       const { data: { user }, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -181,36 +183,41 @@ export default function Auth() {
           }
         }
       });
-
+  
       if (signUpError) throw signUpError;
       if (!user) throw new Error("Failed to create user");
-
+  
       const { error: profileError } = await supabase
         .from("profiles")
         .insert([
           {
             id: user.id,
             full_name: fullName,
-            role: role,
-            email: email
+            role: role
           }
         ])
         .select()
         .single();
-
+  
       if (profileError) throw profileError;
-
+  
       setSuccess("Success! Please check your email to confirm your account.");
       
       setEmail("");
       setConfirmEmail("");
       setPassword("");
       setFullName("");
+      setRegisteredUserId(user.id);
+      setView("profile-setup");
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleProfileSetupComplete = () => {
+    navigate(role === "seller" ? "/seller-dashboard" : "/dashboard");
   };
 
   const renderLogin = () => (
@@ -513,7 +520,13 @@ export default function Auth() {
             <AlertDescription>{success}</AlertDescription>
           </Alert>
         )}
-        {view === "forgot-password" ? (
+        {view === "profile-setup" && registeredUserId ? (
+          <ProfileSetup
+            userId={registeredUserId}
+            userRole={role}
+            onComplete={handleProfileSetupComplete}
+          />
+        ) : view === "forgot-password" ? (
           renderForgotPassword()
         ) : view === "update-password" ? (
           renderUpdatePassword()

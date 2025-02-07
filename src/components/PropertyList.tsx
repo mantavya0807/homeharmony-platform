@@ -1,10 +1,12 @@
-// src/components/PropertyList.tsx
 import { motion } from "framer-motion";
 import { PropertyCard } from "@/components/PropertyCard";
 import { Loader2 } from "lucide-react";
 
 interface Property {
   id: string;
+  seller_id: string;
+  seller_name: string;
+  seller_avatar_url?: string;
   title: string;
   price: number;
   address: string;
@@ -14,16 +16,18 @@ interface Property {
   bathrooms: number;
   square_feet: number;
   images: string[];
-  isSaved?: boolean;
+  is_verified?: boolean;
   click_count?: number;
+  sublease_from?: string;
+  sublease_to?: string;
 }
 
 interface PropertyListProps {
   loading: boolean;
   properties: Property[];
-  userLocation?: { 
-    city: string; 
-    state: string; 
+  userLocation?: {
+    city: string;
+    state: string;
   } | null;
 }
 
@@ -44,21 +48,23 @@ export function PropertyList({ loading, properties, userLocation }: PropertyList
     );
   }
 
-  // Separate and sort properties based on location
+  // Separate and sort properties based on user’s location
   const { localProperties, otherProperties } = properties.reduce(
     (acc, property) => {
-      if (userLocation && 
-          property.city.toLowerCase() === userLocation.city.toLowerCase() &&
-          property.state.toLowerCase() === userLocation.state.toLowerCase()) {
+      if (
+        userLocation &&
+        property.city.toLowerCase() === userLocation.city.toLowerCase() &&
+        property.state.toLowerCase() === userLocation.state.toLowerCase()
+      ) {
         acc.localProperties.push(property);
       } else {
         acc.otherProperties.push(property);
       }
       return acc;
     },
-    { 
-      localProperties: [] as Property[], 
-      otherProperties: [] as Property[] 
+    {
+      localProperties: [] as Property[],
+      otherProperties: [] as Property[],
     }
   );
 
@@ -79,12 +85,21 @@ export function PropertyList({ loading, properties, userLocation }: PropertyList
                 transition={{ delay: index * 0.1 }}
               >
                 <PropertyCard
-                  {...property}
+                  id={property.id}
+                  title={property.title}
+                  price={property.price}
                   location={`${property.city}, ${property.state}`}
                   imageUrl={property.images?.[0]}
                   beds={property.bedrooms}
                   baths={property.bathrooms}
                   sqft={property.square_feet}
+                  sublease_from={property.sublease_from}
+                  sublease_to={property.sublease_to}
+                  is_verified={property.is_verified}
+                  // Pass seller info
+                  sellerId={property.seller_id}
+                  sellerName={property.seller_name}
+                  sellerAvatarUrl={property.seller_avatar_url}
                 />
               </motion.div>
             ))}
@@ -95,9 +110,7 @@ export function PropertyList({ loading, properties, userLocation }: PropertyList
       {/* Properties in other locations */}
       {otherProperties.length > 0 && (
         <div>
-          <h2 className="text-xl font-semibold mb-4">
-            Other Properties
-          </h2>
+          <h2 className="text-xl font-semibold mb-4">Other Properties</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {otherProperties.map((property, index) => (
               <motion.div
@@ -107,12 +120,21 @@ export function PropertyList({ loading, properties, userLocation }: PropertyList
                 transition={{ delay: index * 0.1 }}
               >
                 <PropertyCard
-                  {...property}
+                  id={property.id}
+                  title={property.title}
+                  price={property.price}
                   location={`${property.city}, ${property.state}`}
                   imageUrl={property.images?.[0]}
                   beds={property.bedrooms}
                   baths={property.bathrooms}
                   sqft={property.square_feet}
+                  sublease_from={property.sublease_from}
+                  sublease_to={property.sublease_to}
+                  is_verified={property.is_verified}
+                  // Pass seller info
+                  sellerId={property.seller_id}
+                  sellerName={property.seller_name}
+                  sellerAvatarUrl={property.seller_avatar_url}
                 />
               </motion.div>
             ))}
