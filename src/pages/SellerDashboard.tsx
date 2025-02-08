@@ -23,7 +23,6 @@ import { AddressInput } from "@/components/AddressInput";
 import StripeOnboarding from "@/components/StripeOnboarding";
 
 import type { Database } from "@/integrations/supabase/types";
-// import { verifyDocument } from "@/server/api/documentVerification";
 
 type Property = Database["public"]["Tables"]["properties"]["Row"];
 type HousingComplex = Database["public"]["Tables"]["housing_complexes"]["Row"];
@@ -39,6 +38,7 @@ interface PropertyForm {
   bathrooms: string;
   square_feet: string;
   address: string;
+  unit: string;
   city: string;
   state: string;
   zip_code: string;
@@ -78,6 +78,7 @@ export default function SellerDashboard() {
     description: "",
     price: "",
     address: "",
+    unit: "",
     city: "",
     state: "",
     zip_code: "",
@@ -243,7 +244,9 @@ export default function SellerDashboard() {
   const uploadMedia = async (propertyId: string) => {
     const uploadPromises = mediaFiles.map(async (mediaFile, index) => {
       try {
-        const roomSegment = mediaFile.room ? `-${mediaFile.room.replace(/\s+/g, "_")}` : "";
+        const roomSegment = mediaFile.room
+          ? `-${mediaFile.room.replace(/\s+/g, "_")}`
+          : "";
         const fileExt = mediaFile.file.name.split(".").pop();
         const fileName = `${propertyId}/${Date.now()}-${index}.${fileExt}`;
         const { data: existingFiles } = await supabase.storage
@@ -281,6 +284,7 @@ export default function SellerDashboard() {
     file: File,
     propertyDetails: {
       address: string;
+      unit: string;
       city: string;
       state: string;
       zip_code: string;
@@ -289,86 +293,103 @@ export default function SellerDashboard() {
     }
   ) => {
     try {
-      console.log("[Frontend] Starting verification upload for property:", propertyId);
+      console.log(
+        "[Frontend] Starting verification upload for property:",
+        propertyId
+      );
       console.log("[Frontend] File details:", {
         name: file.name,
         type: file.type,
         size: file.size,
       });
       console.log("[Frontend] Property details:", propertyDetails);
-  
+
       // Validate file size and type
       const maxSize = 5 * 1024 * 1024; // 5MB
       if (file.size > maxSize) {
         throw new Error("File size must be less than 5MB");
       }
-      const allowedTypes = ["image/jpeg", "image/png", "image/jpg", "application/pdf"];
+      const allowedTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/jpg",
+        "application/pdf",
+      ];
       if (!allowedTypes.includes(file.type)) {
-        throw new Error("File type not supported. Please upload a JPEG, PNG, or PDF file.");
+        throw new Error(
+          "File type not supported. Please upload a JPEG, PNG, or PDF file."
+        );
       }
-    
+
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("propertyDetails", JSON.stringify(propertyDetails));
-    
+      formData.append(
+        "propertyDetails",
+        JSON.stringify({
+          ...propertyDetails,
+          unit: propertyDetails.unit, // Include unit in verification
+        })
+      );
+
       console.log("[Frontend] Sending request to /api/verify-document ...");
       const response = await fetch("http://localhost:4000/api/verify-document", {
         method: "POST",
         body: formData,
       });
-    
+
       console.log("[Frontend] Received response:", response.status);
       if (!response.ok) {
         const errorData = await response.json();
         console.error("[Frontend] Verification error response:", errorData);
         throw new Error(errorData.error || "Document verification failed");
       }
-    
+
       const verificationResult = await response.json();
       console.log("[Frontend] Verification result:", verificationResult);
-    
+
       // --- Compute additional lease info values ---
-      // (Note: In your OCR text, several numbers may be extracted.
-      // Currently, we use the first extracted number as the lease rent,
-      // but you may want to choose a different match based on context.)
       const rawLeaseRent = verificationResult.leaseInfo?.originalRent;
-      const originalLease = rawLeaseRent != null && !isNaN(parseFloat(rawLeaseRent))
-        ? parseFloat(rawLeaseRent)
+      const originalLease =
+        rawLeaseRent != null && !isNaN(parseFloat(rawLeaseRent))
+          ? parseFloat(rawLeaseRent)
+          : null;
+
+      const currentPrice = propertyDetails.price
+        ? parseFloat(propertyDetails.price)
         : null;
-    
-      const currentPrice = propertyDetails.price ? parseFloat(propertyDetails.price) : null;
-    
+
       let rentDifferential = null;
       if (originalLease !== null && currentPrice !== null && currentPrice !== 0) {
         const diff = ((originalLease - currentPrice) / currentPrice) * 100;
         rentDifferential = !isNaN(diff) ? parseFloat(diff.toFixed(2)) : null;
-        // Ensure the differential is within the allowed range (numeric(5,2) allows up to 999.99)
         if (rentDifferential !== null && Math.abs(rentDifferential) >= 1000) {
-          console.warn("[Frontend] Computed rent differential is out of range:", rentDifferential);
+          console.warn(
+            "[Frontend] Computed rent differential is out of range:",
+            rentDifferential
+          );
           rentDifferential = null;
         }
       }
-    
-      // Convert lease term safely (should be an integer)
+
       const leaseTermRaw = verificationResult.leaseInfo?.leaseTerm;
       let originalLeaseTerm = null;
       if (leaseTermRaw != null) {
         const term = parseInt(String(leaseTermRaw), 10);
         originalLeaseTerm = isNaN(term) ? null : term;
       }
-    
+
       console.log("[Frontend] Computed values:", {
         originalLease,
         currentPrice,
         rentDifferential,
         originalLeaseTerm,
       });
-    
+
       // --- Upload the verification document to Supabase ---
       const timestamp = Date.now();
       const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
       const filePath = `${propertyId}/${timestamp}-${sanitizedFileName}`;
-    
+
       const { error: uploadError } = await supabase.storage
         .from("property-verifications")
         .upload(filePath, file, {
@@ -376,54 +397,51 @@ export default function SellerDashboard() {
           contentType: file.type,
           upsert: true,
         });
-    
+
       if (uploadError) {
         throw new Error(`Failed to upload file: ${uploadError.message}`);
       }
-    
+
       const { data: publicUrlData } = supabase.storage
         .from("property-verifications")
         .getPublicUrl(filePath);
-    
+
       if (!publicUrlData?.publicUrl) {
         throw new Error("Failed to get public URL for uploaded file");
       }
-    
+
       // --- Update the property record with verification data ---
-// Inside handleVerificationUpload function
-const { error: updateError } = await supabase
-  .from("properties")
-  .update({
-    is_verified: verificationResult.is_verified,
-    verification_document_url: publicUrlData.publicUrl,
-    verified_at: verificationResult.is_verified ? new Date().toISOString() : null,
-    sublease_from: verificationResult.leaseInfo?.startDate
-      ? new Date(verificationResult.leaseInfo.startDate).toISOString()
-      : null,
-    sublease_to: verificationResult.leaseInfo?.endDate
-      ? new Date(verificationResult.leaseInfo.endDate).toISOString()
-      : null,
-    original_lease_rent: verificationResult.leaseInfo?.originalRent || null,
-    // Calculate rent differential safely
-    rent_differential: (() => {
-      const originalRent = verificationResult.leaseInfo?.originalRent;
-      const currentPrice = parseFloat(propertyDetails.price);
-      if (!originalRent || !currentPrice || currentPrice === 0) return null;
-      
-      // Calculate percentage difference
-      const diff = ((originalRent - currentPrice) / currentPrice) * 100;
-      // Ensure the value is within reasonable bounds
-      return Math.max(Math.min(diff, 999.99), -999.99);
-    })(),
-    original_lease_term: verificationResult.leaseInfo?.leaseTerm || null,
-  })
-  .eq("id", propertyId);
-        console.log(verificationResult);
+      const { error: updateError } = await supabase
+        .from("properties")
+        .update({
+          is_verified: verificationResult.is_verified,
+          verification_document_url: publicUrlData.publicUrl,
+          verified_at: verificationResult.is_verified
+            ? new Date().toISOString()
+            : null,
+          sublease_from: verificationResult.leaseInfo?.startDate
+            ? new Date(verificationResult.leaseInfo.startDate).toISOString()
+            : null,
+          sublease_to: verificationResult.leaseInfo?.endDate
+            ? new Date(verificationResult.leaseInfo.endDate).toISOString()
+            : null,
+          original_lease_rent: verificationResult.leaseInfo?.originalRent || null,
+          rent_differential: (() => {
+            const originalRent = verificationResult.leaseInfo?.originalRent;
+            const currentPrice = parseFloat(propertyDetails.price);
+            if (!originalRent || !currentPrice || currentPrice === 0) return null;
+            const diff = ((originalRent - currentPrice) / currentPrice) * 100;
+            return Math.max(Math.min(diff, 999.99), -999.99);
+          })(),
+          original_lease_term: verificationResult.leaseInfo?.leaseTerm || null,
+        })
+        .eq("id", propertyId);
+      console.log(verificationResult);
       if (updateError) {
         console.error("Update error details:", updateError);
         throw new Error("Failed to update property verification status");
       }
-    
+
       toast({
         title: verificationResult.is_verified
           ? "Verification Successful"
@@ -433,7 +451,7 @@ const { error: updateError } = await supabase
           : "Not enough matching details found for automatic verification.",
         variant: verificationResult.is_verified ? "default" : "destructive",
       });
-    
+
       return {
         success: true,
         is_verified: verificationResult.is_verified,
@@ -450,9 +468,6 @@ const { error: updateError } = await supabase
       throw error;
     }
   };
-  
-  
-  
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -472,6 +487,7 @@ const { error: updateError } = await supabase
         bathrooms,
         square_feet,
         address,
+        unit,
         city,
         state,
         zip_code,
@@ -494,6 +510,7 @@ const { error: updateError } = await supabase
             bathrooms: parseInt(bathrooms),
             square_feet: parseInt(square_feet),
             address,
+            unit,
             city,
             state,
             zip_code,
@@ -537,6 +554,7 @@ const { error: updateError } = await supabase
         console.log("Uploading verification document...");
         const propertyDetails = {
           address,
+          unit,
           city,
           state,
           zip_code,
@@ -578,6 +596,7 @@ const { error: updateError } = await supabase
       "description",
       "price",
       "address",
+      "unit",
       "city",
       "state",
       "zip_code",
@@ -627,6 +646,7 @@ const { error: updateError } = await supabase
       description: "",
       price: "",
       address: "",
+      unit: "",
       city: "",
       state: "",
       zip_code: "",
@@ -709,7 +729,7 @@ const { error: updateError } = await supabase
                         >
                           <X className="h-4 w-4" />
                         </button>
-                        {/* ── New: Room Selection Dropdown ── */}
+                        {/* Room Selection Dropdown */}
                         <select
                           value={file.room}
                           onChange={(e) => updateMediaFileRoom(index, e.target.value)}
@@ -863,14 +883,11 @@ const { error: updateError } = await supabase
                     />
                     {newProperty.verification_document && (
                       <div className="mt-2 flex items-center space-x-2">
-                        {newProperty.verification_document.type ===
-                        "application/pdf" ? (
+                        {newProperty.verification_document.type === "application/pdf" ? (
                           <ImageIcon className="h-6 w-6 text-red-500" />
                         ) : (
                           <img
-                            src={URL.createObjectURL(
-                              newProperty.verification_document
-                            )}
+                            src={URL.createObjectURL(newProperty.verification_document)}
                             alt="Verification Preview"
                             className="h-6 w-6 object-cover"
                           />
@@ -883,14 +900,42 @@ const { error: updateError } = await supabase
                     </p>
                   </div>
                 </div>
-                {/* Address Input */}
+                {/* Address and Unit Inputs */}
+                <div className="space-y-2">
+                  <Label htmlFor="address">Address</Label>
+                  <Input
+                    id="address"
+                    value={newProperty.address}
+                    onChange={(e) =>
+                      setNewProperty((prev) => ({ ...prev, address: e.target.value }))
+                    }
+                    placeholder="Enter address"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="unit">Unit/Apt #</Label>
+                  <Input
+                    id="unit"
+                    value={newProperty.unit}
+                    onChange={(e) =>
+                      setNewProperty((prev) => ({ ...prev, unit: e.target.value }))
+                    }
+                    placeholder="Enter unit or apartment number"
+                  />
+                </div>
+                {/* AddressInput for City, State, ZIP */}
                 <AddressInput
                   address={newProperty.address}
+                  unit={newProperty.unit}
                   city={newProperty.city}
                   state={newProperty.state}
                   zipCode={newProperty.zip_code}
                   onAddressChange={(address) =>
                     setNewProperty((prev) => ({ ...prev, address }))
+                  }
+                  onUnitChange={(unit) =>
+                    setNewProperty((prev) => ({ ...prev, unit }))
                   }
                   onCityChange={(city) =>
                     setNewProperty((prev) => ({ ...prev, city }))

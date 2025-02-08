@@ -13,6 +13,7 @@ import { ChatInterface } from "./components/ChatInterface";
 import { Navigation } from "./components/Navigation";
 import { Analytics } from "@/components/Analytics";
 import { useEffect, useState } from "react";
+import {BuyerReviews, SellerReviews}  from "./components/Reviews";
 import { supabase } from "./integrations/supabase/client";
 import PropertyDetails from "./components/PropertyDetails";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -22,8 +23,6 @@ import ProfilePage from "./components/ProfilePage";
 import UserReviews from "./components/UserReview";
 import StripeConnect from "./components/StripeConnect";
 import { SellerProfile } from "./components/SellerProfile";
-import { SellerReviews } from "./components/SellerReviews";
-import { BuyerReviews } from "./components/BuyerReviews";
 
 const queryClient = new QueryClient();
 

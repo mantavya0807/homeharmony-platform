@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { toast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Star, Home } from "lucide-react";
@@ -19,12 +20,16 @@ import { Label } from "@/components/ui/label";
 interface Review {
   id: string;
   rating: number;
-  comment: string;
+  review_text: string;
   created_at: string;
   reply?: string;
   reviewer: {
     full_name: string;
     avatar_url?: string;
+  };
+  property_id: string;
+  property?: {
+    title: string;
   };
 }
 
@@ -49,6 +54,11 @@ export function SellerProfile() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [showReviewForm, setShowReviewForm] = useState(false);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const [newReview, setNewReview] = useState({
+    rating: 0,
+    review_text: ''
+  });
 
   useEffect(() => {
     if (!sellerId) return;
@@ -65,39 +75,51 @@ export function SellerProfile() {
             .single();
           setUserRole(userData?.role);
         }
+
         // Get seller profile
         const { data: sellerProfile, error: profileError } = await supabase
           .from("profiles")
           .select("*")
           .eq("id", sellerId)
           .single();
+
         if (profileError) throw profileError;
         if (!sellerProfile) {
           setLoading(false);
           return;
         }
-        // Get seller reviews (including any reply)
+
+        // Get seller reviews with property information
         const { data: reviewsData, error: reviewsError } = await supabase
           .from("seller_reviews")
-          .select("*, reviewer:profiles!seller_reviews_reviewer_id_fkey(full_name, avatar_url)")
+          .select(`
+            *,
+            reviewer:profiles!seller_reviews_reviewer_id_fkey(full_name, avatar_url),
+            property:properties(title)
+          `)
           .eq("seller_id", sellerId)
           .order("created_at", { ascending: false });
+
         if (reviewsError) throw reviewsError;
+
         // Get seller properties
         const { data: propertiesData, error: propsError } = await supabase
           .from("properties")
           .select("*")
           .eq("seller_id", sellerId);
+
         if (propsError) throw propsError;
+
         // Calculate average rating
-        const averageRating =
-          (reviewsData?.reduce((acc: number, r: Review) => acc + r.rating, 0) || 0) /
-          (reviewsData?.length || 1);
+        const averageRating = reviewsData?.length 
+          ? reviewsData.reduce((acc, r) => acc + r.rating, 0) / reviewsData.length 
+          : 0;
+
         setProfile({
           ...sellerProfile,
           average_rating: averageRating,
           total_reviews: reviewsData?.length || 0,
-          total_properties: propertiesData?.length || 0,
+          total_properties: propertiesData?.length || 0
         });
         setReviews(reviewsData || []);
         setProperties(propertiesData || []);
@@ -112,67 +134,80 @@ export function SellerProfile() {
 
   const submitReview = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    const property_id = formData.get("property_id") as string;
-    const rating = Number(formData.get("rating"));
-    const comment = formData.get("comment") as string;
+    if (!selectedPropertyId) {
+      toast({
+        title: "Error",
+        description: "Please select a property to review",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const { data: authData } = await supabase.auth.getUser();
       if (!authData.user) {
         navigate("/auth");
         return;
       }
-      // Check if a review already exists for this (seller, reviewer, property) combo
+
+      // Check if a review already exists for this property
       const { data: existingReview } = await supabase
         .from("seller_reviews")
         .select("*")
         .eq("seller_id", sellerId)
         .eq("reviewer_id", authData.user.id)
-        .eq("property_id", property_id)
+        .eq("property_id", selectedPropertyId)
         .maybeSingle();
+
       if (existingReview) {
-        // Optionally, you can update the existing review or simply reject duplicate submission.
-        // For this solution, we always add a new review, so we do NOT update.
-        // Uncomment the following lines if you want to update instead:
-        /*
-        const { error: updateError } = await supabase
-          .from("seller_reviews")
-          .update({
-            rating,
-            comment,
-            property_id,
-          })
-          .eq("seller_id", sellerId)
-          .eq("reviewer_id", authData.user.id)
-          .eq("property_id", property_id);
-        if (updateError) throw updateError;
-        */
-        // Otherwise, show an error (or ignore):
-        throw new Error("You have already reviewed this property. Please update your review if needed.");
-      } else {
-        // Insert new review
-        const { error } = await supabase.from("seller_reviews").insert({
+        toast({
+          title: "Error",
+          description: "You have already reviewed this property",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Insert new review
+      const { error } = await supabase
+        .from("seller_reviews")
+        .insert({
           seller_id: sellerId,
           reviewer_id: authData.user.id,
-          rating,
-          comment,
-          property_id,
+          property_id: selectedPropertyId,
+          rating: newReview.rating,
+          review_text: newReview.review_text,
         });
-        if (error) throw error;
-      }
+
+      if (error) throw error;
+
       // Refresh reviews
       const { data: reviewsData } = await supabase
         .from("seller_reviews")
-        .select("*, reviewer:profiles!seller_reviews_reviewer_id_fkey(full_name, avatar_url)")
+        .select(`
+          *,
+          reviewer:profiles!seller_reviews_reviewer_id_fkey(full_name, avatar_url),
+          property:properties(title)
+        `)
         .eq("seller_id", sellerId)
         .order("created_at", { ascending: false });
+
       setReviews(reviewsData || []);
       setShowReviewForm(false);
-      form.reset();
+      setNewReview({ rating: 0, review_text: '' });
+      setSelectedPropertyId("");
+
+      toast({
+        title: "Success",
+        description: "Review submitted successfully",
+      });
     } catch (error: any) {
-      console.error("Error submitting review:", error.message || error);
-      // Optionally display error message to the user
+      console.error("Error submitting review:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit review",
+        variant: "destructive",
+      });
     }
   };
 
@@ -227,7 +262,14 @@ export function SellerProfile() {
                     <Label htmlFor="property_id" className="block mb-1">
                       Select Property
                     </Label>
-                    <select name="property_id" id="property_id" className="border p-2 rounded w-full" required>
+                    <select 
+                      name="property_id" 
+                      id="property_id" 
+                      className="border p-2 rounded w-full" 
+                      required
+                      value={selectedPropertyId}
+                      onChange={(e) => setSelectedPropertyId(e.target.value)}
+                    >
                       <option value="">Select a property</option>
                       {properties.map((prop: any) => (
                         <option key={prop.id} value={prop.id}>
@@ -280,7 +322,7 @@ export function SellerProfile() {
                         {new Date(review.created_at).toLocaleDateString()}
                       </span>
                     </div>
-                    <p className="mt-4">{review.comment}</p>
+                    <p className="mt-4">{review.review_text}</p>
                     {review.reply && (
                       <div className="mt-4 p-2 border rounded bg-gray-50">
                         <p className="text-sm"><strong>Reply:</strong> {review.reply}</p>

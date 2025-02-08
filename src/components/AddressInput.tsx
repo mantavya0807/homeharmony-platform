@@ -7,10 +7,12 @@ import { Loader2 } from "lucide-react";
 
 interface AddressInputProps {
   address: string;
+  unit: string;
   city: string;
   state: string;
   zipCode: string;
   onAddressChange: (value: string) => void;
+  onunitChange: (value: string) => void;
   onCityChange: (value: string) => void;
   onStateChange: (value: string) => void;
   onZipCodeChange: (value: string) => void;
@@ -22,6 +24,7 @@ export function AddressInput({
   state,
   zipCode,
   onAddressChange,
+  onunitChange,
   onCityChange,
   onStateChange,
   onZipCodeChange,

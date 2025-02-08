@@ -34,6 +34,23 @@ import { HousingComplexesFilter, Filters, AMENITIES } from '@/components/Housing
 
 // Types definitions remain the same...
 
+
+const useDebounce = (func, delay) => {
+  const timeoutRef = useRef(null);
+
+  const debouncedFunction = useCallback((...args) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      func(...args);
+    }, delay);
+  }, [func, delay]);
+
+  return debouncedFunction;
+};
+
+
 const RatingStars = memo(({ rating }: { rating: number }) => {
   // RatingStars component implementation remains the same...
 });
@@ -213,9 +230,12 @@ export default function HousingComplexes() {
   };
 
   // Fetch initial data
+  const YourComponent = ({ fetchComplexes }) => {
+    const debouncedFetchComplexes = useDebounce(fetchComplexes, 500);
+
   useEffect(() => {
     fetchComplexes();
-  }, [fetchComplexes]);
+  }, [debouncedFetchComplexes]);
 
   if (loading) {
     return (
@@ -415,4 +435,5 @@ export default function HousingComplexes() {
       </div>
     </div>
   );
+};
 }

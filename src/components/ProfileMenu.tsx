@@ -30,24 +30,51 @@ export default function ProfileMenu({ profile, onSignOut }: ProfileMenuProps) {
   const [reviewNotificationCount, setReviewNotificationCount] = useState<number>(0);
 
   useEffect(() => {
-    async function fetchReviewNotifications() {
-      if (profile.role === "seller") {
-        // Count reviews that have not been replied to
+    const fetchNotifications = async () => {
+      if (!profile?.id || !profile?.role) return;
+
+      if (profile.role === 'seller') {
+        // For sellers: Count unread reviews (ones without replies)
         const { count, error } = await supabase
-          .from("seller_reviews")
-          .select("id", { count: "exact", head: true })
-          .eq("seller_id", profile.id)
-          .is("reply", null);
+          .from('seller_reviews')
+          .select('id', { count: 'exact' })
+          .eq('seller_id', profile.id)
+          .is('reply', null);
+
         if (!error && count !== null) {
           setReviewNotificationCount(count);
         }
-      } else if (profile.role === "buyer") {
-        // For buyers, show the count of reviews they have written (if desired)
-        setReviewNotificationCount(0);
+      } else {
+        // For buyers: Count new replies to their reviews
+        const { count, error } = await supabase
+          .from('seller_reviews')
+          .select('id', { count: 'exact' })
+          .eq('reviewer_id', profile.id)
+          .not('reply', 'is', null)
+          .eq('reply_read', false);
+
+        if (!error && count !== null) {
+          setReviewNotificationCount(count);
+        }
       }
-    }
-    fetchReviewNotifications();
-  }, [profile]);
+    };
+
+    fetchNotifications();
+
+    // Subscribe to changes
+    const subscription = supabase
+      .channel('review_changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'seller_reviews'
+      }, fetchNotifications)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription)
+    };
+  }, [profile?.id, profile?.role]);
 
   return (
     <DropdownMenu>

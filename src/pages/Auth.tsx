@@ -112,9 +112,12 @@ export default function Auth() {
         throw new Error('Please enter a valid email address');
       }
   
-      // Update this to match your configured redirect URL exactly
+      // Get the current origin for the redirect URL
+      const origin = window.location.origin;
+      const redirectTo = `${origin}/auth#type=recovery`;
+  
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth#type=recovery`
+        redirectTo: redirectTo
       });
   
       if (error) throw error;
@@ -123,7 +126,7 @@ export default function Auth() {
       setEmail("");
     } catch (err: any) {
       console.error('Password reset error:', err);
-      setError(err.message);
+      setError(err.message || 'Failed to send recovery email');
     } finally {
       setLoading(false);
     }
