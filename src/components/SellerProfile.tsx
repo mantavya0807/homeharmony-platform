@@ -257,42 +257,70 @@ export function SellerProfile() {
                 {showReviewForm ? "Cancel Review" : "Write a Review"}
               </Button>
               {showReviewForm && (
-                <form onSubmit={submitReview} className="mt-4 space-y-4">
-                  <div>
-                    <Label htmlFor="property_id" className="block mb-1">
-                      Select Property
-                    </Label>
-                    <select 
-                      name="property_id" 
-                      id="property_id" 
-                      className="border p-2 rounded w-full" 
-                      required
-                      value={selectedPropertyId}
-                      onChange={(e) => setSelectedPropertyId(e.target.value)}
-                    >
-                      <option value="">Select a property</option>
-                      {properties.map((prop: any) => (
-                        <option key={prop.id} value={prop.id}>
-                          {prop.title}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <Label htmlFor="rating" className="block mb-1">
-                      Rating (1-5)
-                    </Label>
-                    <Input type="number" name="rating" id="rating" min="1" max="5" required className="w-full" />
-                  </div>
-                  <div>
-                    <Label htmlFor="comment" className="block mb-1">
-                      Comment
-                    </Label>
-                    <textarea name="comment" id="comment" required className="border p-2 rounded w-full" rows={4} />
-                  </div>
-                  <Button type="submit">Submit Review</Button>
-                </form>
-              )}
+  <form onSubmit={submitReview} className="mt-4 space-y-4">
+    <div>
+      <Label htmlFor="property_id" className="block mb-1">
+        Select Property
+      </Label>
+      <select 
+        name="property_id" 
+        id="property_id" 
+        className="border p-2 rounded w-full" 
+        required
+        value={selectedPropertyId}
+        onChange={(e) => setSelectedPropertyId(e.target.value)}
+      >
+        <option value="">Select a property</option>
+        {properties.map((prop: any) => (
+          <option key={prop.id} value={prop.id}>
+            {prop.title}
+          </option>
+        ))}
+      </select>
+    </div>
+    <div>
+      <Label htmlFor="rating" className="block mb-1">
+        Rating (1-5)
+      </Label>
+      <Input
+        type="number"
+        name="rating"
+        id="rating"
+        min="1"
+        max="5"
+        required
+        className="w-full"
+        value={newReview.rating}
+        onChange={(e) =>
+          setNewReview({
+            ...newReview,
+            rating: Number(e.target.value),
+          })
+        }
+      />
+    </div>
+    <div>
+      <Label htmlFor="comment" className="block mb-1">
+        Comment
+      </Label>
+      <textarea
+        name="comment"
+        id="comment"
+        required
+        className="border p-2 rounded w-full"
+        rows={4}
+        value={newReview.review_text}
+        onChange={(e) =>
+          setNewReview({
+            ...newReview,
+            review_text: e.target.value,
+          })
+        }
+      />
+    </div>
+    <Button type="submit">Submit Review</Button>
+  </form>
+)}
             </div>
           )}
 
