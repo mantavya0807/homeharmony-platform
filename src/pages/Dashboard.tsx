@@ -1,30 +1,26 @@
-// src/pages/Dashboard.tsx
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { PropertyList } from "@/components/PropertyList";
 import { PropertyFilters } from "@/components/PropertyFilter";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PopularProperties } from "@/components/PopularProperties";
 import { LocationRequestDialog } from "@/components/LocationRequestDialog";
 import { useLocation } from "@/hooks/useLocation";
 import { Button } from "@/components/ui/button";
-import { Search, LayoutGrid, Map as MapIcon } from "lucide-react";
-import PropertyMapView from "@/components/PropertyMapView";
+import { LayoutGrid, Map as MapIcon } from "lucide-react";
+import MapAndListView from "@/components/PropertyMapView";
 import { Card } from "@/components/ui/card";
 import { LocationSearchBar } from "@/components/LocationSearchBar";
 
+// –––––––– PROPERTY INTERFACE ––––––––––
 interface Property {
   id: string;
-  seller_id: string;
-  seller_name?: string;
-  seller_avatar_url?: string;
   title: string;
   price: number;
   address: string;
   city: string;
   state: string;
+  zip_code: string;
   bedrooms: number;
   bathrooms: number;
   square_feet: number;
@@ -32,24 +28,53 @@ interface Property {
   lat?: number;
   lng?: number;
   property_type: "house" | "apartment" | "condo" | "townhouse";
+  unit?: string;
   saved_properties?: { id: string }[];
   isSaved?: boolean;
   click_count?: number;
-  sublease_from?: string;
-  sublease_to?: string;
-  is_verified?: boolean;
+}
+
+// Default center: State College, PA
+const DEFAULT_CENTER = { lat: 40.7934, lng: -77.86 };
+
+// –––––––– HELPER: HAVERSINE DISTANCE ––––––––––
+function haversineDistance(
+  coord1: { lat: number; lng: number },
+  coord2: { lat: number; lng: number }
+): number {
+  const R = 3958.8; // Earth's radius in miles
+  const dLat = ((coord2.lat - coord1.lat) * Math.PI) / 180;
+  const dLng = ((coord2.lng - coord1.lng) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((coord1.lat * Math.PI) / 180) *
+      Math.cos((coord2.lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Geolocation dialog and device location (used if user hasn’t done a manual search)
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const { latitude, longitude } = useLocation();
-  const [userLocation, setUserLocation] = useState<{ city: string; state: string } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  // View mode: list vs. map
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
 
+  // Manual location search/filtering state
   const [searchLocation, setSearchLocation] = useState("");
+  const [manualLocationSet, setManualLocationSet] = useState(false);
+  // Radius filtering
+  const [radiusFilteringEnabled, setRadiusFilteringEnabled] = useState(false);
+  const [radiusMiles, setRadiusMiles] = useState(10);
+
+  // Additional property filters (beds, baths, square feet, price)
   const [filters, setFilters] = useState({
     beds: "any",
     baths: "any",
@@ -57,8 +82,14 @@ export default function Dashboard() {
     maxSquareFeet: "",
     priceRange: [0, 2000000],
   });
-  const [currentSearchLocation, setCurrentSearchLocation] = useState<{ city: string; state: string } | null>(null);
 
+  // Values returned from geocoding the manual search.
+  const [geocodedCity, setGeocodedCity] = useState("");
+  const [geocodedState, setGeocodedState] = useState("");
+  const [geocodedZip, setGeocodedZip] = useState("");
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number }>(DEFAULT_CENTER);
+
+  // On initial load, show location permission dialog if not asked before
   useEffect(() => {
     const locationPermissionAsked = localStorage.getItem("locationPermissionAsked");
     if (!locationPermissionAsked) {
@@ -66,79 +97,36 @@ export default function Dashboard() {
     }
   }, []);
 
+  // If no manual search is done, use the device’s location
   useEffect(() => {
-    if (latitude && longitude && window.google?.maps) {
-      const geocoder = new window.google.maps.Geocoder();
+    if (latitude && longitude && window.google?.maps && !manualLocationSet) {
       const latlng = { lat: latitude, lng: longitude };
-
-      geocoder.geocode({ location: latlng }, (results, status) => {
-        if (status === "OK" && results?.[0]) {
-          const addressComponents = results[0].address_components;
-          const city = addressComponents.find((comp) => comp.types.includes("locality"))?.long_name;
-          const state = addressComponents.find((comp) =>
-            comp.types.includes("administrative_area_level_1")
-          )?.short_name;
-
-          if (city && state) {
-            setUserLocation({ city, state });
-            setSearchLocation(`${city}, ${state}`);
-            setCurrentSearchLocation({ city, state });
-          }
-        }
-      });
+      setUserLocation(latlng);
+      setMapCenter(latlng);
     }
-  }, [latitude, longitude]);
+  }, [latitude, longitude, manualLocationSet]);
 
-  const fetchProperties = async (locationQuery?: string) => {
+  // Fetch properties from Supabase
+  const fetchProperties = async () => {
     try {
       setLoading(true);
-
-      const { data: propertiesData, error } = await supabase
+      const { data: propertiesData, error: propertiesError } = await supabase
         .from("properties")
-        .select(`
-          *,
-          seller:profiles(
-            id,
-            full_name,
-            avatar_url
-          ),
-          saved_properties(id),
-          property_clicks(id)
-        `)
+        .select(`*, saved_properties (id), property_clicks (id)`)
         .eq("status", "available");
 
-      if (error) throw error;
+      if (propertiesError) throw propertiesError;
 
-      const transformed = (propertiesData || []).map((p: any) => {
-        return {
-          id: p.id,
-          seller_id: p.seller?.id,
-          seller_name: p.seller?.full_name,
-          seller_avatar_url: p.seller?.avatar_url,
-          title: p.title,
-          price: p.price,
-          address: p.address,
-          city: p.city,
-          state: p.state,
-          bedrooms: p.bedrooms,
-          bathrooms: p.bathrooms,
-          square_feet: p.square_feet,
-          images: p.images,
-          is_verified: p.is_verified,
-          sublease_from: p.sublease_from,
-          sublease_to: p.sublease_to,
-        } as Property;
-      });
+      // Convert lat/lng to numbers & track isSaved, click_count
+      const transformed = (propertiesData || []).map((p: any) => ({
+        ...p,
+        lat: p.lat ? Number(p.lat) : undefined,
+        lng: p.lng ? Number(p.lng) : undefined,
+        isSaved: p.saved_properties?.length > 0,
+        click_count: p.property_clicks?.length || 0,
+      }));
 
-      let filteredProperties = transformed;
-      if (locationQuery) {
-        const [city, state] = locationQuery.split(",").map((s) => s.trim());
-        if (city && state) {
-          setCurrentSearchLocation({ city, state });
-        }
-      }
-
-      setProperties(filteredProperties);
+      setProperties(transformed);
     } catch (error) {
       console.error("Error fetching properties:", error);
     } finally {
@@ -147,57 +135,190 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (userLocation) {
-      fetchProperties(`${userLocation.city}, ${userLocation.state}`);
-    } else {
-      fetchProperties();
+    fetchProperties();
+  }, []);
+
+  // Geocode the location from the search bar
+  const geocodeLocation = (locationStr: string) => {
+    if (!window.google?.maps) {
+      // If Google not loaded, just store the string so we can do partial matches
+      setGeocodedCity(locationStr);
+      setGeocodedState("");
+      setGeocodedZip("");
+      setMapCenter(DEFAULT_CENTER);
+      return;
     }
-  }, [userLocation]);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await fetchProperties(searchLocation);
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode({ address: locationStr }, (results, status) => {
+      if (status === "OK" && results?.[0]) {
+        const newCenter = results[0].geometry.location.toJSON();
+        setMapCenter(newCenter);
+
+        let foundCity = "";
+        let foundState = "";
+        let foundZip = "";
+        for (const comp of results[0].address_components) {
+          if (comp.types.includes("locality")) {
+            foundCity = comp.long_name;
+          }
+          if (comp.types.includes("administrative_area_level_1")) {
+            foundState = comp.short_name; // e.g. "PA"
+          }
+          if (comp.types.includes("postal_code")) {
+            foundZip = comp.long_name;
+          }
+        }
+        // Fallback: if no locality is found, try to use the state or raw search
+        if (!foundCity && foundState) {
+          foundCity = foundState;
+        } else if (!foundCity && !foundState && !foundZip) {
+          // if everything empty, just set city to the raw string
+          foundCity = locationStr;
+        }
+
+        setGeocodedCity(foundCity);
+        setGeocodedState(foundState);
+        setGeocodedZip(foundZip);
+      } else {
+        // If geocoding fails, just use the raw string for a partial match
+        setGeocodedCity(locationStr);
+        setGeocodedState("");
+        setGeocodedZip("");
+        setMapCenter(DEFAULT_CENTER);
+      }
+    });
   };
 
-  const handleFiltersChange = (newFilters: typeof filters) => {
-    setFilters(newFilters);
-    fetchProperties(searchLocation);
+  // When user submits a search in LocationSearchBar
+  const handleSearchLocation = (location: string) => {
+    setSearchLocation(location);
+    geocodeLocation(location);
+    setManualLocationSet(true);
   };
+
+  // Filter in memory based on location or radius, plus the other property filters
+  const applyLocalFilters = (props: Property[]): Property[] => {
+    let filtered = props;
+
+    // If user manually searched something
+    if (manualLocationSet && searchLocation.trim() !== "") {
+      if (radiusFilteringEnabled) {
+        // If we have lat/lng for property, compare to our mapCenter
+        filtered = filtered.filter((property) => {
+          if (property.lat && property.lng) {
+            const distance = haversineDistance(mapCenter, {
+              lat: property.lat,
+              lng: property.lng,
+            });
+            return distance <= radiusMiles;
+          }
+          return false;
+        });
+      } else {
+        // Non-radius: partial match on city/state/zip
+        const searchStr = (geocodedCity || geocodedState || geocodedZip || "").toLowerCase();
+        if (searchStr) {
+          filtered = filtered.filter((property) => {
+            const propCity = property.city?.toLowerCase() || "";
+            const propState = property.state?.toLowerCase() || "";
+            const propZip = property.zip_code?.toLowerCase() || "";
+            // True if *any* of these contain our geocoded city/state/zip
+            return (
+              propCity.includes(searchStr) ||
+              propState.includes(searchStr) ||
+              propZip.includes(searchStr)
+            );
+          });
+        }
+      }
+    }
+
+    // Apply beds/baths/price/sqft filters
+    filtered = filtered.filter((property) => {
+      if (filters.beds !== "any" && property.bedrooms < Number(filters.beds)) return false;
+      if (filters.baths !== "any" && property.bathrooms < Number(filters.baths)) return false;
+
+      const sf = property.square_feet || 0;
+      const minSf = Number(filters.minSquareFeet) || 0;
+      const maxSf = Number(filters.maxSquareFeet) || Infinity;
+      if (sf < minSf || sf > maxSf) return false;
+
+      const [minPrice, maxPrice] = filters.priceRange;
+      if (property.price < minPrice || property.price > maxPrice) return false;
+
+      return true;
+    });
+
+    return filtered;
+  };
+
+  const filteredProperties = applyLocalFilters(properties);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="max-w-2xl mx-auto space-y-4">
-            <LocationSearchBar 
-              onSearch={(location) => {
-                setSearchLocation(location);
-                fetchProperties(location);
-              }}
-              initialValue={searchLocation}
-            />
-            <PropertyFilters onFiltersChange={handleFiltersChange} />
-          </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white shadow py-4">
+        <div className="container mx-auto px-4">
+          <h1 className="text-3xl font-bold text-gray-800">Property Dashboard</h1>
         </div>
-      </div>
+      </header>
 
-      <div className="container mx-auto px-4 py-8">
-        <PopularProperties 
-          properties={properties}
-          searchLocation={searchLocation}
-        />
-      </div>
+      {/* Search & Filter Section */}
+      <section className="bg-white border-b">
+        <div className="container mx-auto px-4 py-6">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSearchLocation(searchLocation);
+            }}
+            className="space-y-4"
+          >
+            <LocationSearchBar onSearch={handleSearchLocation} initialValue={searchLocation} />
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl font-semibold">Available Properties</h2>
-          <div className="flex gap-2">
+            <PropertyFilters onFiltersChange={setFilters} currentFilters={filters} />
+
+            <div className="flex items-center space-x-4">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={radiusFilteringEnabled}
+                  onChange={(e) => setRadiusFilteringEnabled(e.target.checked)}
+                  className="h-5 w-5 text-blue-600"
+                />
+                <span className="text-gray-700">Filter by radius</span>
+              </label>
+              {radiusFilteringEnabled && (
+                <div className="flex items-center space-x-2">
+                  <span className="text-gray-600 text-sm">Radius: {radiusMiles} miles</span>
+                  <input
+                    id="radius"
+                    type="range"
+                    min="1"
+                    max="50"
+                    step="1"
+                    value={radiusMiles}
+                    onChange={(e) => setRadiusMiles(Number(e.target.value))}
+                    className="w-48 accent-blue-600"
+                  />
+                </div>
+              )}
+            </div>
+          </form>
+        </div>
+      </section>
+
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-semibold text-gray-800">Available Properties</h2>
+          <div className="flex space-x-3">
             <Button
               variant={viewMode === "list" ? "default" : "outline"}
               size="sm"
               onClick={() => setViewMode("list")}
             >
-              <LayoutGrid className="h-4 w-4 mr-2" />
+              <LayoutGrid className="h-4 w-4 mr-1" />
               List
             </Button>
             <Button
@@ -205,43 +326,31 @@ export default function Dashboard() {
               size="sm"
               onClick={() => setViewMode("map")}
             >
-              <MapIcon className="h-4 w-4 mr-2" />
+              <MapIcon className="h-4 w-4 mr-1" />
               Map
             </Button>
           </div>
         </div>
 
         {viewMode === "list" ? (
-          <div className="space-y-12">
-            <PopularProperties properties={properties} searchLocation={currentSearchLocation} />
-
-            <div className="relative">
-              <div className="flex items-center gap-2 mb-6">
-                <h2 className="text-2xl font-semibold">All Available Properties</h2>
-                {currentSearchLocation && (
-                  <span className="text-muted-foreground">
-                    in {currentSearchLocation.city}, {currentSearchLocation.state}
-                  </span>
-                )}
-              </div>
+          <>
+            <PopularProperties properties={filteredProperties} />
+            <div className="bg-white shadow rounded-lg p-4">
               <PropertyList
                 loading={loading}
-                properties={properties}
-                userLocation={currentSearchLocation || userLocation}
+                properties={filteredProperties}
+                userLocation={manualLocationSet ? null : userLocation}
               />
             </div>
-          </div>
+          </>
         ) : (
-          <Card className="p-0 overflow-hidden h-[600px]">
-            <PropertyMapView properties={properties} />
+          <Card className="h-[600px] overflow-hidden">
+            <MapAndListView properties={filteredProperties} center={mapCenter} />
           </Card>
         )}
+      </main>
 
-        <LocationRequestDialog
-          open={showLocationDialog}
-          onOpenChange={setShowLocationDialog}
-        />
-      </div>
+      <LocationRequestDialog open={showLocationDialog} onOpenChange={setShowLocationDialog} />
     </div>
   );
 }

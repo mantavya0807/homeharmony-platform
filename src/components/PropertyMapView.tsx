@@ -1,5 +1,5 @@
-// components/MapAndListView.tsx
-import React, { useState, useEffect } from 'react';
+// components/PropertyMapView.tsx
+import React, { useState, useEffect, useRef } from 'react';
 import { PropertyCard } from '@/components/PropertyCard';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
@@ -88,6 +88,24 @@ const darkStyle = [
     stylers: [{ color: '#17263c' }],
   },
 ];
+
+interface Property {
+  id: string;
+  title: string;
+  price: number;
+  address: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  bedrooms: number;
+  bathrooms: number;
+  square_feet: number;
+  images: string[];
+  lat?: number;
+  lng?: number;
+  property_type: "house" | "apartment" | "condo" | "townhouse";
+  unit?: string;
+}
 
 function getMarkerIcon(property: any, theme: string) {
   const price = property.price;
@@ -253,6 +271,7 @@ function getDetailedStreetViewIcon(property: any, theme: string) {
   };
 }
 
+// Group properties by address (used for marker creation)
 function groupProperties(properties: any[]) {
   return properties.reduce((acc: Record<string, any[]>, p) => {
     const key = `${p.address.trim().toLowerCase()}_${p.city.trim().toLowerCase()}_${p.state.trim().toLowerCase()}_${p.zip_code.trim()}`;
@@ -263,11 +282,13 @@ function groupProperties(properties: any[]) {
 }
 
 interface MapAndListViewProps {
-  properties: any[];
+  properties: Property[];
+  // Instead of auto-fitting bounds to markers, we accept a center (from the search or user location)
+  center?: { lat: number; lng: number };
   userLocation?: { lat: number; lng: number };
 }
 
-export default function MapAndListView({ properties, userLocation }: MapAndListViewProps) {
+export default function MapAndListView({ properties, center, userLocation }: MapAndListViewProps) {
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -284,69 +305,45 @@ export default function MapAndListView({ properties, userLocation }: MapAndListV
   const { isLoaded, error } = useGoogleMaps();
   const { theme } = useTheme();
 
-  // Initialize the map – if there are properties, fit bounds; otherwise, if a userLocation is provided, center there.
+  const mapRef = useRef<HTMLDivElement>(null);
+
+  // For the street view “picker” marker (draggable pin)
+  const streetViewMarkerRef = useRef<google.maps.Marker | null>(null);
+
+  // Initialize the map using the provided center (or userLocation or default to State College)
   useEffect(() => {
     if (!isLoaded) return;
     const mapElem = document.getElementById('property-map');
     if (!mapElem) return;
 
+    // Use the passed center, or userLocation if available, or default to State College (40.7934, -77.8600)
+    const initialCenter = center || userLocation || { lat: 40.7934, lng: -77.8600 };
     const mapOptions: google.maps.MapOptions = {
-      disableDefaultUI: true,
-      zoom: 12,
+      center: initialCenter,
+      zoom: 16,
       mapTypeId: mapType,
       styles: theme === 'dark' ? darkStyle : [],
+      gestureHandling: "greedy",
     };
 
     const mapInstance = new window.google.maps.Map(mapElem, mapOptions);
-
-    if (properties.length > 0) {
-      const geocoder = new window.google.maps.Geocoder();
-      const bounds = new window.google.maps.LatLngBounds();
-      const geocodePromises = properties.map((p) => {
-        return new Promise((resolve) => {
-          const address = `${p.address}, ${p.city}, ${p.state} ${p.zip_code}`;
-          geocoder.geocode({ address }, (results, status) => {
-            if (status === 'OK' && results && results[0]) {
-              bounds.extend(results[0].geometry.location);
-              resolve(true);
-            } else {
-              resolve(false);
-            }
-          });
-        });
-      });
-      Promise.all(geocodePromises).then(() => {
-        mapInstance.fitBounds(bounds);
-        const listener = mapInstance.addListener('idle', () => {
-          if (mapInstance.getZoom() < 16) {
-            mapInstance.setZoom(16);
-          }
-          google.maps.event.removeListener(listener);
-        });
-      });
-    } else if (userLocation) {
-      mapInstance.setCenter(userLocation);
-      mapInstance.setZoom(16);
-    } else if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((pos) => {
-        mapInstance.setCenter({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        });
-        mapInstance.setZoom(16);
-      });
-    }
-
     setMap(mapInstance);
     setMapLoaded(true);
-  }, [isLoaded, properties, mapType, theme, userLocation]);
+  }, [isLoaded, center, userLocation, mapType, theme]);
 
-  // Create markers and collect property locations without duplicating entries.
+  // When the center prop changes, animate (pan) to the new center.
+  useEffect(() => {
+    if (map && center) {
+      map.panTo(center);
+    }
+  }, [center, map]);
+
+  // Create markers for properties (using geocoding when needed)
   useEffect(() => {
     if (!map || !mapLoaded) return;
+    // Clear previous markers
     markers.forEach((marker) => marker.setMap(null));
     const newMarkers: google.maps.Marker[] = [];
-    const geocoder = new window.google.maps.Geocoder();
     const filteredProperties = properties.filter((p) =>
       filterTypes.includes(p.property_type)
     );
@@ -356,17 +353,29 @@ export default function MapAndListView({ properties, userLocation }: MapAndListV
       const sample = group[0];
       const address = `${sample.address}, ${sample.city}, ${sample.state} ${sample.zip_code}`;
       return new Promise<{ propWithLoc: { property: any; location: google.maps.LatLng }[] }>((resolve) => {
+        const geocoder = new window.google.maps.Geocoder();
         geocoder.geocode({ address }, (results, status) => {
           if (status === 'OK' && results && results[0]) {
             const position = results[0].geometry.location;
+            // Choose marker icon (detailed icon used in Street View mode)
             const icon = streetViewActive
               ? getDetailedStreetViewIcon(sample, theme || 'light')
               : getMarkerIcon(sample, theme || 'light');
+
+            // Use the unit number if available; otherwise, use the first letter of the title.
+            const markerLabel = sample.unit ? sample.unit : sample.title.charAt(0);
+
             const marker = new window.google.maps.Marker({
               position,
               map,
               title: sample.title,
               icon,
+              label: {
+                text: markerLabel,
+                color: "#fff",
+                fontSize: "12px",
+                fontWeight: "bold",
+              },
             });
             marker.addListener('click', () => {
               map.panTo(position);
@@ -397,6 +406,7 @@ export default function MapAndListView({ properties, userLocation }: MapAndListV
     };
   }, [map, mapLoaded, properties, filterTypes, theme, streetViewActive]);
 
+  // Update the list of visible properties based on the map’s bounds.
   useEffect(() => {
     if (map) {
       const updateVisibleProperties = () => {
@@ -416,36 +426,109 @@ export default function MapAndListView({ properties, userLocation }: MapAndListV
     }
   }, [map, propertiesWithLocation]);
 
-  const handleStreetViewToggle = () => {
+  /* ===== Custom Map Controls ===== */
+  useEffect(() => {
+    if (!map) return;
+
+    // ----- Zoom Controls (Plus/Minus) -----
+    const zoomControlDiv = document.createElement('div');
+    zoomControlDiv.style.margin = '10px';
+    zoomControlDiv.style.background = 'rgba(255,255,255,0.8)';
+    zoomControlDiv.style.borderRadius = '4px';
+    zoomControlDiv.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+    zoomControlDiv.style.display = 'flex';
+    zoomControlDiv.style.flexDirection = 'column';
+
+    // Zoom In Button
+    const zoomInButton = document.createElement('button');
+    zoomInButton.innerHTML = '+';
+    zoomInButton.style.border = 'none';
+    zoomInButton.style.background = 'transparent';
+    zoomInButton.style.padding = '8px';
+    zoomInButton.style.cursor = 'pointer';
+    zoomInButton.style.fontSize = '16px';
+    zoomControlDiv.appendChild(zoomInButton);
+
+    // Zoom Out Button
+    const zoomOutButton = document.createElement('button');
+    zoomOutButton.innerHTML = '−';
+    zoomOutButton.style.border = 'none';
+    zoomOutButton.style.background = 'transparent';
+    zoomOutButton.style.padding = '8px';
+    zoomOutButton.style.cursor = 'pointer';
+    zoomOutButton.style.fontSize = '16px';
+    zoomControlDiv.appendChild(zoomOutButton);
+
+    zoomInButton.addEventListener('click', () => {
+      map.setZoom(map.getZoom() + 1);
+    });
+    zoomOutButton.addEventListener('click', () => {
+      map.setZoom(map.getZoom() - 1);
+    });
+
+    map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(zoomControlDiv);
+
+    // ----- Street View Picker Control (Pin Icon) -----
+    const streetViewControlDiv = document.createElement('div');
+    streetViewControlDiv.style.margin = '10px';
+    streetViewControlDiv.style.background = 'rgba(255,255,255,0.8)';
+    streetViewControlDiv.style.borderRadius = '4px';
+    streetViewControlDiv.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+    streetViewControlDiv.style.cursor = 'pointer';
+    streetViewControlDiv.style.padding = '8px';
+    streetViewControlDiv.title = 'Toggle Street View';
+    // Using a Unicode pushpin icon (you can replace this with your own SVG/icon)
+    streetViewControlDiv.innerHTML = '&#128205;';
+    map.controls[google.maps.ControlPosition.TOP_LEFT].push(streetViewControlDiv);
+
+    streetViewControlDiv.addEventListener('click', () => {
+      setStreetViewActive(prev => !prev);
+    });
+  }, [map]);
+
+  // ----- Handle Street View Mode via a draggable “picker” marker -----
+  useEffect(() => {
     if (!map) return;
     const streetView = map.getStreetView();
-    if (!streetViewActive) {
-      const center = map.getCenter();
-      streetView.setPosition(center);
-      streetView.setPov({ heading: 0, pitch: 0 });
+    if (streetViewActive) {
+      // Show Street View panorama and add a draggable marker for choosing the location.
       streetView.setVisible(true);
+      if (!streetViewMarkerRef.current) {
+        const marker = new google.maps.Marker({
+          position: map.getCenter(),
+          map: map,
+          draggable: true,
+          icon: {
+            // A simple red pushpin icon (you can replace with your own)
+            url:
+              'data:image/svg+xml;charset=UTF-8,' +
+              encodeURIComponent(`
+                <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="red">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zM7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 2.74-2.25 6.19-5 9.88C9.25 15.19 7 11.74 7 9z"/>
+                  <circle cx="12" cy="9" r="2.5" fill="red"/>
+                </svg>
+              `),
+            scaledSize: new google.maps.Size(30, 30),
+          },
+        });
+        marker.addListener('dragend', (e) => {
+          streetView.setPosition(e.latLng);
+        });
+        streetViewMarkerRef.current = marker;
+      } else {
+        streetViewMarkerRef.current.setPosition(map.getCenter());
+      }
+      // Update the Street View position to match the picker marker.
+      streetView.setPosition(streetViewMarkerRef.current.getPosition());
     } else {
+      // When Street View mode is disabled, hide the panorama and remove the picker marker.
       streetView.setVisible(false);
+      if (streetViewMarkerRef.current) {
+        streetViewMarkerRef.current.setMap(null);
+        streetViewMarkerRef.current = null;
+      }
     }
-    setStreetViewActive(!streetViewActive);
-  };
-
-  useEffect(() => {
-    if (map && streetViewActive) {
-      const clickListener = map.addListener('click', (e) => {
-        const streetView = map.getStreetView();
-        streetView.setPosition(e.latLng);
-      });
-      const dragendListener = map.addListener('dragend', () => {
-        const streetView = map.getStreetView();
-        streetView.setPosition(map.getCenter());
-      });
-      return () => {
-        google.maps.event.removeListener(clickListener);
-        google.maps.event.removeListener(dragendListener);
-      };
-    }
-  }, [map, streetViewActive]);
+  }, [streetViewActive, map]);
 
   if (!isLoaded) {
     return (
@@ -467,7 +550,7 @@ export default function MapAndListView({ properties, userLocation }: MapAndListV
     <div className="flex h-screen">
       {/* Left half: Map */}
       <div className="w-1/2 relative">
-        <div id="property-map" className="absolute inset-0" />
+        <div id="property-map" ref={mapRef} className="absolute inset-0" />
         {/* Overlay: Filters */}
         <div className="absolute top-4 left-4 p-2 bg-background/90 backdrop-blur-sm rounded-lg shadow-lg z-10">
           <div className="flex flex-col space-y-1">
@@ -498,15 +581,8 @@ export default function MapAndListView({ properties, userLocation }: MapAndListV
             })}
           </div>
         </div>
-        {/* Overlay: Map Controls */}
-        <div className="absolute top-4 right-4 z-10 flex flex-col space-y-2">
-          <Button
-            variant="outline"
-            className="bg-background/90 backdrop-blur-sm"
-            onClick={handleStreetViewToggle}
-          >
-            {streetViewActive ? 'Exit Street View' : 'Street View'}
-          </Button>
+        {/* Overlay: Satellite Toggle (Street View toggle moved to map control) */}
+        <div className="absolute top-4 right-4 z-10">
           <Button
             variant="outline"
             className="bg-background/90 backdrop-blur-sm"

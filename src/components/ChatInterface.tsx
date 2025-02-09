@@ -21,13 +21,13 @@ export function ChatInterface() {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const [selectedChat, setSelectedChat] = useState(null);
+  const [selectedChat, setSelectedChat] = useState<any>(null);
   const [message, setMessage] = useState('');
   const [showCreateChat, setShowCreateChat] = useState(false);
   const [loading, setLoading] = useState(false);
-  const scrollAreaRef = useRef(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const getCurrentUser = async () => {
@@ -41,14 +41,16 @@ export function ChatInterface() {
     if (scrollAreaRef.current) {
       const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
       if (scrollContainer) {
-        setTimeout(() => {
-          scrollContainer.scrollTop = scrollContainer.scrollHeight;
-        }, immediate ? 0 : 100);
+        const scrollOptions = immediate ? { behavior: 'instant' } : { behavior: 'smooth' };
+        scrollContainer.scrollTo({
+          top: scrollContainer.scrollHeight,
+          ...scrollOptions
+        });
       }
     }
   };
 
-  const scrollToFirstUnread = async (chatId) => {
+  const scrollToFirstUnread = async (chatId: string) => {
     try {
       const { data: messages } = await supabase
         .from('messages')
@@ -108,16 +110,10 @@ export function ChatInterface() {
           if (chat) {
             setSelectedChat(chat);
             navigate(location.pathname, { replace: true });
-            const hasUnread = chat.messages.some(msg => 
-              !msg.read && msg.sender_id !== currentUserId
-            );
-            setHasUnreadMessages(hasUnread);
+            
+            // Scroll to bottom with a slight delay to ensure messages are rendered
             setTimeout(() => {
-              if (hasUnread) {
-                scrollToFirstUnread(chat.id);
-              } else {
-                scrollToBottom(true);
-              }
+              scrollToBottom(true);
             }, 100);
           }
         } catch (error) {
@@ -137,6 +133,17 @@ export function ChatInterface() {
       initializeChat();
     }
   }, [location.state?.chatId, navigate, currentUserId]);
+
+  // New useEffect to scroll to the bottom when messages update
+  useEffect(() => {
+    // If a chat is selected and has messages, scroll to bottom after a delay
+    if (selectedChat && selectedChat.messages && selectedChat.messages.length > 0) {
+      const timer = setTimeout(() => {
+        scrollToBottom(true);
+      }, 200); // Adjust the delay if necessary
+      return () => clearTimeout(timer);
+    }
+  }, [selectedChat, selectedChat?.messages?.length]);
 
   // Subscribe to new messages
   useEffect(() => {
@@ -189,7 +196,7 @@ export function ChatInterface() {
     };
   }, [selectedChat?.id, currentUserId]);
 
-  const handleSendMessage = async (e) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() || !selectedChat) return;
 
@@ -221,7 +228,7 @@ export function ChatInterface() {
     }
   };
 
-  const handleChatSelect = async (chat, hasUnread = false) => {
+  const handleChatSelect = async (chat: any, hasUnread = false) => {
     setSelectedChat(chat);
     setHasUnreadMessages(hasUnread);
 
@@ -288,7 +295,7 @@ export function ChatInterface() {
                       <SheetTitle>Group Members</SheetTitle>
                     </SheetHeader>
                     <div className="py-4">
-                      {selectedChat.chat_participants.map((participant) => (
+                      {selectedChat.chat_participants.map((participant: any) => (
                         <div key={participant.profiles.id} className="py-2">
                           {participant.profiles.full_name}
                         </div>

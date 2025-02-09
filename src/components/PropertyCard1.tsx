@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Bed, Bath, Square } from "lucide-react";
+import { MapPin, Bed, Bath, Square, HashIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PropertyCardProps {
@@ -12,6 +12,7 @@ interface PropertyCardProps {
   beds: number;
   baths: number;
   sqft: number;
+  unit: string;
   imageUrl: string;
   userRole?: string | null;
 }
@@ -24,6 +25,7 @@ export function PropertyCard({
   beds,
   baths,
   sqft,
+  unit,
   imageUrl,
 }: PropertyCardProps) {
   const navigate = useNavigate();
@@ -40,7 +42,7 @@ export function PropertyCard({
           <img
             src={imageUrl}
             alt={title}
-            className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-110"
+            className="object-contain w-full h-full transition-transform duration-300 group-hover:scale-110"
           />
           <Badge className="absolute top-2 right-2 bg-primary">
             ${price.toLocaleString()}
@@ -67,6 +69,10 @@ export function PropertyCard({
           <Square size={16} />
           <span className="text-sm">{sqft} sqft</span>
         </div>
+        <div className="flex items-center gap-1">
+            <HashIcon size={16} />
+            <span className="text-sm">{unit} Unit</span>
+          </div> 
       </CardFooter>
     </Card>
   );

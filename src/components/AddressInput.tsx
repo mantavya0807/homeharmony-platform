@@ -20,6 +20,7 @@ interface AddressInputProps {
 
 export function AddressInput({
   address,
+  unit,
   city,
   state,
   zipCode,

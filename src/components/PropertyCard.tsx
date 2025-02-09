@@ -7,6 +7,7 @@ import {
   Bath,
   Square,
   Heart,
+  HashIcon,
   CheckCircle,
   Eye,
 } from "lucide-react";
@@ -24,7 +25,7 @@ import {
 import { trackPropertyClick } from "@/utils/trackPropertyClick";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-interface PropertyCardProps {s
+interface PropertyCardProps {
   id: string;
   title: string;
   price: number;
@@ -32,6 +33,7 @@ interface PropertyCardProps {s
   beds: number;
   baths: number;
   sqft: number;
+  unit: string;
   imageUrl: string;
   roomTag?: string; // NEW: optional room tag for the image
   sublease_from?: string;
@@ -52,6 +54,7 @@ export function PropertyCard({
   beds,
   baths,
   sqft,
+  unit,
   imageUrl,
   roomTag, // new prop
   sublease_from,
@@ -194,7 +197,7 @@ export function PropertyCard({
             <img
               src={imageUrl}
               alt={title}
-              className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-110"
+              className="object-contain w-full h-full transition-transform duration-300 group-hover:scale-110"
             />
             {/* Price Badge (top right) */}
             <Badge className="absolute top-2 right-2 bg-primary text-white px-3 py-1 rounded-full shadow-md">
@@ -305,6 +308,10 @@ export function PropertyCard({
             <Square size={16} />
             <span className="text-sm">{sqft} sqft</span>
           </div>
+          <div className="flex items-center gap-1">
+            <HashIcon size={16} />
+            <span className="text-sm">{unit} Unit</span>
+          </div> 
         </CardFooter>
       </Card>
     </TooltipProvider>

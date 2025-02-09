@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+// HousingComplexes.tsx
+import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/components/ui/use-toast';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Star, StarHalf, StarIcon } from 'lucide-react';
+import { Loader2, StarIcon, StarHalf } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -32,13 +32,11 @@ import {
 import ImageGallery from '@/components/ImageGallery';
 import { HousingComplexesFilter, Filters, AMENITIES } from '@/components/HousingComplexesFilter';
 
-// Types definitions remain the same...
+// Custom hook to debounce a function
+const useDebounce = (func: (...args: any[]) => void, delay: number) => {
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-
-const useDebounce = (func, delay) => {
-  const timeoutRef = useRef(null);
-
-  const debouncedFunction = useCallback((...args) => {
+  const debouncedFunction = useCallback((...args: any[]) => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -50,11 +48,28 @@ const useDebounce = (func, delay) => {
   return debouncedFunction;
 };
 
-
+// RatingStars displays 5 stars (filled, half, or empty) based on the rating (out of 5)
+// and shows the numeric average rating next to them.
 const RatingStars = memo(({ rating }: { rating: number }) => {
-  // RatingStars component implementation remains the same...
+  const fullStars = Math.floor(rating);
+  const hasHalfStar = rating - fullStars >= 0.5;
+  const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+
+  return (
+    <div className="flex items-center">
+      {[...Array(fullStars)].map((_, i) => (
+        <StarIcon key={`full-${i}`} className="w-4 h-4 text-yellow-500" />
+      ))}
+      {hasHalfStar && <StarHalf key="half" className="w-4 h-4 text-yellow-500" />}
+      {[...Array(emptyStars)].map((_, i) => (
+        <StarIcon key={`empty-${i}`} className="w-4 h-4 text-gray-300" />
+      ))}
+      <span className="ml-2 text-sm">({rating.toFixed(1)}/5)</span>
+    </div>
+  );
 });
 
+// Simple star rating input component
 const StarRatingInput = memo(({
   rating,
   onRatingChange,
@@ -62,17 +77,28 @@ const StarRatingInput = memo(({
   rating: number;
   onRatingChange: (rating: number) => void;
 }) => {
-  // StarRatingInput component implementation remains the same...
+  return (
+    <div>
+      <input
+        type="number"
+        value={rating}
+        onChange={(e) => onRatingChange(Number(e.target.value))}
+        min={0}
+        max={5}
+        step={0.5}
+        className="border rounded p-1"
+      />
+    </div>
+  );
 });
-
 
 export default function HousingComplexes() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [complexes, setComplexes] = useState<HousingComplex[]>([]);
+  const [complexes, setComplexes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedComplex, setSelectedComplex] = useState<HousingComplex | null>(null);
-  const [selectedComplexProperties, setSelectedComplexProperties] = useState<Property[]>([]);
+  const [selectedComplex, setSelectedComplex] = useState<any>(null);
+  const [selectedComplexProperties, setSelectedComplexProperties] = useState<any[]>([]);
   const [newReview, setNewReview] = useState({ rating: 0, review_text: "" });
   const [submittingReview, setSubmittingReview] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -83,7 +109,7 @@ export default function HousingComplexes() {
     amenities: []
   });
 
-  // Fetch housing complexes
+  // Fetch housing complexes data along with reviews and photos.
   const fetchComplexes = useCallback(async () => {
     try {
       setLoading(true);
@@ -108,7 +134,6 @@ export default function HousingComplexes() {
           )
         `);
 
-      // Apply filters
       if (filters.city) query = query.ilike('city', `%${filters.city}%`);
       if (filters.state) query = query.ilike('state', `%${filters.state}%`);
       if (filters.zip_code) query = query.ilike('zip_code', `%${filters.zip_code}%`);
@@ -154,7 +179,10 @@ export default function HousingComplexes() {
     }
   }, [filters, toast]);
 
-  // Fetch properties for a specific complex
+  // Create a debounced version of fetchComplexes to prevent excessive requests.
+  const debouncedFetchComplexes = useDebounce(fetchComplexes, 500);
+
+  // Fetch properties for a specific complex.
   const fetchPropertiesForComplex = async (complexId: string) => {
     try {
       const { data, error } = await supabase
@@ -174,13 +202,13 @@ export default function HousingComplexes() {
     }
   };
 
-  // Handle selecting a complex
-  const handleComplexSelect = async (complex: HousingComplex) => {
+  // When a complex is selected, load its properties.
+  const handleComplexSelect = async (complex: any) => {
     setSelectedComplex(complex);
     await fetchPropertiesForComplex(complex.id);
   };
 
-  // Handle submitting a review
+  // Handle review submission.
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedComplex) return;
@@ -188,7 +216,7 @@ export default function HousingComplexes() {
     try {
       setSubmittingReview(true);
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         toast({
           title: "Error",
@@ -214,7 +242,7 @@ export default function HousingComplexes() {
         description: "Review submitted successfully",
       });
 
-      // Refresh the complexes data
+      // Refresh the complexes data after review submission.
       await fetchComplexes();
       setNewReview({ rating: 0, review_text: "" });
     } catch (error: any) {
@@ -229,13 +257,10 @@ export default function HousingComplexes() {
     }
   };
 
-  // Fetch initial data
-  const YourComponent = ({ fetchComplexes }) => {
-    const debouncedFetchComplexes = useDebounce(fetchComplexes, 500);
-
+  // Fetch complexes on mount and whenever filters change.
   useEffect(() => {
-    fetchComplexes();
-  }, [debouncedFetchComplexes]);
+    debouncedFetchComplexes();
+  }, [filters, debouncedFetchComplexes]);
 
   if (loading) {
     return (
@@ -248,7 +273,7 @@ export default function HousingComplexes() {
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-6">Housing Complexes</h1>
-      
+
       {/* Filters */}
       <HousingComplexesFilter
         filters={filters}
@@ -261,8 +286,8 @@ export default function HousingComplexes() {
           <Card key={complex.id} className="hover:shadow-lg transition-shadow">
             <CardContent className="p-0">
               {/* Complex Photos */}
-              {complex.housing_complex_photos.length > 0 ? (
-                <ImageGallery photos={complex.housing_complex_photos.map(photo => photo.photo_url)} />
+              {complex.housing_complex_photos && complex.housing_complex_photos.length > 0 ? (
+                <ImageGallery photos={complex.housing_complex_photos.map((photo: any) => photo.photo_url)} />
               ) : (
                 <div className="h-48 bg-muted flex items-center justify-center">
                   <p className="text-muted-foreground">No photos available</p>
@@ -272,8 +297,8 @@ export default function HousingComplexes() {
               <div className="p-6">
                 <h3 className="text-xl font-semibold mb-2">{complex.name}</h3>
                 <p className="text-muted-foreground mb-4">{complex.address}</p>
-                
-                {/* Rating */}
+
+                {/* Rating Display */}
                 <div className="mb-4">
                   <RatingStars rating={complex.average_rating} />
                   <p className="text-sm text-muted-foreground mt-1">
@@ -312,13 +337,13 @@ export default function HousingComplexes() {
                       </DialogHeader>
 
                       <div className="space-y-6">
-                        {/* Details sections */}
+                        {/* About Section */}
                         <section>
                           <h3 className="text-lg font-semibold mb-2">About</h3>
                           <p className="text-muted-foreground">{complex.description}</p>
                         </section>
 
-                        {/* Properties section */}
+                        {/* Properties Section */}
                         <section>
                           <h3 className="text-lg font-semibold mb-4">Available Properties</h3>
                           {selectedComplexProperties.length > 0 ? (
@@ -355,7 +380,7 @@ export default function HousingComplexes() {
                           )}
                         </section>
 
-                        {/* Reviews section */}
+                        {/* Reviews Section */}
                         <section>
                           <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold">Reviews</h3>
@@ -366,21 +391,25 @@ export default function HousingComplexes() {
                             )}
                           </div>
 
-                          {/* Review form */}
-                          {userRole === 'buyer' && newReview && (
+                          {/* Review Form */}
+                          {userRole === 'buyer' && (
                             <form onSubmit={handleReviewSubmit} className="mb-6 space-y-4">
                               <div className="space-y-2">
                                 <Label>Rating</Label>
                                 <StarRatingInput
                                   rating={newReview.rating}
-                                  onRatingChange={(rating) => setNewReview(prev => ({ ...prev, rating }))}
+                                  onRatingChange={(rating) =>
+                                    setNewReview(prev => ({ ...prev, rating }))
+                                  }
                                 />
                               </div>
                               <div className="space-y-2">
                                 <Label>Review</Label>
                                 <Textarea
                                   value={newReview.review_text}
-                                  onChange={(e) => setNewReview(prev => ({ ...prev, review_text: e.target.value }))}
+                                  onChange={(e) =>
+                                    setNewReview(prev => ({ ...prev, review_text: e.target.value }))
+                                  }
                                   placeholder="Write your review here..."
                                   required
                                 />
@@ -398,7 +427,7 @@ export default function HousingComplexes() {
                             </form>
                           )}
 
-                          {/* Reviews list */}
+                          {/* Reviews List */}
                           <div className="space-y-4">
                             {complex.reviews.map((review) => (
                               <Card key={review.id}>
@@ -415,11 +444,11 @@ export default function HousingComplexes() {
                                     </span>
                                   </div>
                                 </CardHeader>
-                                <CardContent>
+                                <div className="p-4">
                                   <p className="text-muted-foreground">
                                     {review.review_text}
                                   </p>
-                                </CardContent>
+                                </div>
                               </Card>
                             ))}
                           </div>
@@ -435,5 +464,4 @@ export default function HousingComplexes() {
       </div>
     </div>
   );
-};
 }
