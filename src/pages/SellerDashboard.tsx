@@ -276,6 +276,7 @@ export default function SellerDashboard() {
         throw error;
       }
     });
+    
     return await Promise.all(uploadPromises);
   };
 
@@ -470,6 +471,7 @@ export default function SellerDashboard() {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+
     e.preventDefault();
     if (!validateForm()) return;
     setUploading(true);
@@ -581,7 +583,7 @@ export default function SellerDashboard() {
       setUploading(false);
     }
   };
-
+  
   const validateForm = () => {
     if (mediaFiles.length === 0) {
       toast({
@@ -901,18 +903,18 @@ export default function SellerDashboard() {
                   </div>
                 </div>
                 {/* Address and Unit Inputs */}
-                <div className="space-y-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Input
-                    id="address"
-                    value={newProperty.address}
-                    onChange={(e) =>
-                      setNewProperty((prev) => ({ ...prev, address: e.target.value }))
-                    }
-                    placeholder="Enter address"
-                    required
-                  />
-                </div>
+                <AddressInput
+                  address={newProperty.address}
+                  unit={newProperty.unit}
+                  city={newProperty.city}
+                  state={newProperty.state}
+                  zipCode={newProperty.zip_code}
+                  onAddressChange={(value) => setNewProperty((prev) => ({ ...prev, address: value }))}
+                  onunitChange={(value) => setNewProperty((prev) => ({ ...prev, unit: value }))}
+                  onCityChange={(value) => setNewProperty((prev) => ({ ...prev, city: value }))}
+                  onStateChange={(value) => setNewProperty((prev) => ({ ...prev, state: value }))}
+                  onZipCodeChange={(value) => setNewProperty((prev) => ({ ...prev, zip_code: value }))}
+                />
                 <div className="space-y-2">
                   <Label htmlFor="unit">Unit/Apt #</Label>
                   <Input
@@ -924,29 +926,6 @@ export default function SellerDashboard() {
                     placeholder="Enter unit or apartment number"
                   />
                 </div>
-                {/* AddressInput for City, State, ZIP */}
-                <AddressInput
-                  address={newProperty.address}
-                  unit={newProperty.unit}
-                  city={newProperty.city}
-                  state={newProperty.state}
-                  zipCode={newProperty.zip_code}
-                  onAddressChange={(address) =>
-                    setNewProperty((prev) => ({ ...prev, address }))
-                  }
-                  onUnitChange={(unit) =>
-                    setNewProperty((prev) => ({ ...prev, unit }))
-                  }
-                  onCityChange={(city) =>
-                    setNewProperty((prev) => ({ ...prev, city }))
-                  }
-                  onStateChange={(state) =>
-                    setNewProperty((prev) => ({ ...prev, state }))
-                  }
-                  onZipCodeChange={(zip) =>
-                    setNewProperty((prev) => ({ ...prev, zip_code: zip }))
-                  }
-                />
                 {/* Price and Lease Details */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1115,6 +1094,7 @@ export default function SellerDashboard() {
                 beds={property.bedrooms}
                 baths={property.bathrooms}
                 sqft={property.square_feet}
+                unit={property.unit}
                 roomTag={property.roomTag}
                 imageUrl={
                   property.images?.[0] ||

@@ -1,5 +1,3 @@
-// EditPropertyDialog.tsx
-
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Upload, X, Image as ImageIcon, Loader2 } from "lucide-react";
@@ -18,7 +16,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import type { Database } from "@/integrations/supabase/types";
 import AddHousingComplex from "@/components/AddHousingComplex";
-import {AddressInput} from "@/components/AddressInput"; // Import your existing AddressInput component
+import { AddressInput } from "@/components/AddressInput"; // Import your existing AddressInput component
+import RoomTypeInput from "@/components/RoomTypeInput"; // Import RoomTypeInput component
 
 const VERIFICATION_API_URL = "http://localhost:4000/api/verify-document";
 
@@ -75,6 +74,7 @@ export const EditPropertyDialog = ({
     description: "",
     price: "",
     address: "",
+    unit:"",
     city: "",
     state: "",
     zip_code: "",
@@ -118,6 +118,7 @@ export const EditPropertyDialog = ({
           description: property.description || "",
           price: property.price?.toString() || "",
           address: property.address || "",
+          unit: property.unit || "",
           city: property.city || "",
           state: property.state || "",
           zip_code: property.zip_code || "",
@@ -135,6 +136,7 @@ export const EditPropertyDialog = ({
           description: "",
           price: "",
           address: "",
+          unit:"",
           city: "",
           state: "",
           zip_code: "",
@@ -186,6 +188,7 @@ export const EditPropertyDialog = ({
       try {
         const propertyDetails = {
           address: updatedProperty.address,
+          unit: updatedProperty.unit,
           city: updatedProperty.city,
           state: updatedProperty.state,
           zip_code: updatedProperty.zip_code,
@@ -298,6 +301,7 @@ export const EditPropertyDialog = ({
         bathrooms: parseInt(updatedProperty.bathrooms) || 0,
         square_feet: parseInt(updatedProperty.square_feet) || 0,
         address: updatedProperty.address,
+        unit: updatedProperty.unit,
         city: updatedProperty.city,
         state: updatedProperty.state,
         zip_code: updatedProperty.zip_code,
@@ -558,13 +562,27 @@ export const EditPropertyDialog = ({
               </div>
             </div>
 
+            <div className="space-y-2">
+                  <Label htmlFor="unit">Unit/Apt #</Label>
+                  <Input
+                    id="unit"
+                    value={updatedProperty.unit}
+                    onChange={(e) =>
+                      setUpdatedProperty((prev) => ({ ...prev, unit: e.target.value }))
+                    }
+                    placeholder="Enter unit or apartment number"
+                  />
+                </div>
+
             {/* Address Information Section */}
             <AddressInput
               address={updatedProperty.address}
+              unit={updatedProperty.unit}
               city={updatedProperty.city}
               state={updatedProperty.state}
               zipCode={updatedProperty.zip_code}
               onAddressChange={(address) => setUpdatedProperty({ ...updatedProperty, address })}
+              onUnitChange={(unit) => setUpdatedProperty({ ...updatedProperty, unit })}
               onCityChange={(city) => setUpdatedProperty({ ...updatedProperty, city })}
               onStateChange={(state) => setUpdatedProperty({ ...updatedProperty, state })}
               onZipCodeChange={(zip) => setUpdatedProperty({ ...updatedProperty, zip_code: zip })}

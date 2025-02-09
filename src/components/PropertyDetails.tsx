@@ -78,7 +78,7 @@ const WalkscoreWidget: React.FC<{ address: string }> = ({ address }) => {
   useEffect(() => {
     (window as any).ws_wsid = 'g6a58aea38a124a729e3e228de2412943';
     (window as any).ws_address = address;
-    (window as any).ws_format = 'square';
+    (window as any).ws_format = 'rectangle';
     (window as any).ws_width = '300';
     (window as any).ws_height = '300';
     (window as any).ws_theme = theme === 'dark' ? 'dark' : 'light';
@@ -386,7 +386,7 @@ export default function PropertyDetails() {
           <img
             src={property.images[0]}
             alt={property.title}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-muted">

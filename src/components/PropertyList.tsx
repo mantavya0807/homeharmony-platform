@@ -18,6 +18,7 @@ interface Property {
   images: string[];
   is_verified?: boolean;
   click_count?: number;
+  unit: string;
   sublease_from?: string;
   sublease_to?: string;
 }
@@ -26,6 +27,7 @@ interface PropertyListProps {
   loading: boolean;
   properties: Property[];
   userLocation?: {
+    address: string;
     city: string;
     state: string;
   } | null;
@@ -88,11 +90,12 @@ export function PropertyList({ loading, properties, userLocation }: PropertyList
                   id={property.id}
                   title={property.title}
                   price={property.price}
-                  location={`${property.city}, ${property.state}`}
+                  location={`${property.address || 'Address from DB'}, ${property.city}, ${property.state}`}
                   imageUrl={property.images?.[0]}
                   beds={property.bedrooms}
                   baths={property.bathrooms}
                   sqft={property.square_feet}
+                  unit={property.unit}
                   sublease_from={property.sublease_from}
                   sublease_to={property.sublease_to}
                   is_verified={property.is_verified}
@@ -100,6 +103,7 @@ export function PropertyList({ loading, properties, userLocation }: PropertyList
                   sellerId={property.seller_id}
                   sellerName={property.seller_name}
                   sellerAvatarUrl={property.seller_avatar_url}
+                  views={property.click_count}
                 />
               </motion.div>
             ))}
@@ -123,11 +127,12 @@ export function PropertyList({ loading, properties, userLocation }: PropertyList
                   id={property.id}
                   title={property.title}
                   price={property.price}
-                  location={`${property.city}, ${property.state}`}
+                  location={`${property.address || 'Address from DB'}, ${property.city}, ${property.state}`}
                   imageUrl={property.images?.[0]}
                   beds={property.bedrooms}
                   baths={property.bathrooms}
                   sqft={property.square_feet}
+                  unit={property.unit}
                   sublease_from={property.sublease_from}
                   sublease_to={property.sublease_to}
                   is_verified={property.is_verified}
@@ -135,6 +140,7 @@ export function PropertyList({ loading, properties, userLocation }: PropertyList
                   sellerId={property.seller_id}
                   sellerName={property.seller_name}
                   sellerAvatarUrl={property.seller_avatar_url}
+                  views={property.click_count}
                 />
               </motion.div>
             ))}
@@ -142,5 +148,4 @@ export function PropertyList({ loading, properties, userLocation }: PropertyList
         </div>
       )}
     </div>
-  );
-}
+  );}

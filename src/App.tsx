@@ -13,10 +13,9 @@ import { ChatInterface } from "./components/ChatInterface";
 import { Navigation } from "./components/Navigation";
 import { Analytics } from "@/components/Analytics";
 import { useEffect, useState } from "react";
-import {BuyerReviews, SellerReviews}  from "./components/Reviews";
+import { BuyerReviews, SellerReviews } from "./components/Reviews";
 import { supabase } from "./integrations/supabase/client";
 import PropertyDetails from "./components/PropertyDetails";
-import { ProtectedRoute } from "./components/ProtectedRoute";
 import HousingComplexes from "./components/HousingComplexes";
 import SavedProperties from "./pages/SavedProperties";
 import ProfilePage from "./components/ProfilePage";
@@ -48,7 +47,10 @@ export default function App() {
         setLoading(false);
       }
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
       if (newSession) {
         supabase
@@ -63,6 +65,7 @@ export default function App() {
         setUserRole(null);
       }
     });
+
     return () => {
       subscription.unsubscribe();
     };
@@ -102,8 +105,14 @@ export default function App() {
                     )
                   }
                 />
-                <Route path="/saved" element={!session ? <Navigate to="/auth" /> : <SavedProperties />} />
-                <Route path="/chat" element={!session ? <Navigate to="/auth" /> : <ChatInterface />} />
+                <Route
+                  path="/saved"
+                  element={!session ? <Navigate to="/auth" /> : <SavedProperties />}
+                />
+                <Route
+                  path="/chat"
+                  element={!session ? <Navigate to="/auth" /> : <ChatInterface />}
+                />
                 <Route
                   path="/seller-dashboard"
                   element={
@@ -116,8 +125,14 @@ export default function App() {
                     )
                   }
                 />
-                <Route path="/properties/:id" element={!session ? <Navigate to="/auth" /> : <PropertyDetails />} />
-                <Route path="/profile" element={!session ? <Navigate to="/auth" /> : <ProfilePage />} />
+                <Route
+                  path="/properties/:id"
+                  element={!session ? <Navigate to="/auth" /> : <PropertyDetails />}
+                />
+                <Route
+                  path="/profile"
+                  element={!session ? <Navigate to="/auth" /> : <ProfilePage />}
+                />
                 <Route
                   path="/reviews/:userId"
                   element={!session ? <Navigate to="/auth" /> : <UserReviews />}
@@ -135,7 +150,10 @@ export default function App() {
                   }
                 />
                 {/* Seller profile page */}
-                <Route path="/seller/:sellerId" element={!session ? <Navigate to="/auth" /> : <SellerProfile />} />
+                <Route
+                  path="/seller/:sellerId"
+                  element={!session ? <Navigate to="/auth" /> : <SellerProfile />}
+                />
                 {/* Seller reviews page (for sellers to see reviews received) */}
                 <Route
                   path="/reviews"
