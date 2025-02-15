@@ -2,7 +2,7 @@
 
 ## Project info
 
-**URL**: 123
+**URL**: 
 
 ## How can I edit this code?
 
