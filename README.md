@@ -1,69 +1,142 @@
-# Welcome to your Lovable project
+# HomeHarmony - Property Sublease Platform
 
-## Project info
+HomeHarmony is a modern web application that facilitates property subleasing, connecting property sellers with potential buyers. Built with React, TypeScript, and Supabase, it offers a comprehensive suite of features for managing and discovering property listings.
 
-**URL**: 
+## Features
 
-## How can I edit this code?
+### For Property Sellers
+- 📝 List properties with detailed information and media
+- 🏢 Manage housing complexes and individual properties
+- 💳 Secure payment processing via Stripe Connect
+- 📊 Track property views and engagement
+- ✅ Document verification system for lease agreements
+- 💬 Real-time messaging with potential buyers
+- ⭐ Receive and respond to reviews
 
-There are several ways of editing your application.
+### For Property Buyers
+- 🔍 Advanced property search with filters
+- 🗺️ Map-based property exploration
+- 💖 Save favorite properties
+- 💬 Chat with sellers
+- ⭐ Leave reviews for sellers
+- 💳 Secure payment processing
+- 📱 Mobile-responsive interface
 
-**Use Lovable**
+## Technology Stack
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/d73db0ca-be97-409c-a895-24e449c550fb) and start prompting.
+- **Frontend:**
+  - React
+  - TypeScript
+  - Tailwind CSS
+  - shadcn/ui components
+  - Framer Motion for animations
+  - React Router for navigation
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Backend:**
+  - Supabase for database and authentication
+  - Express.js server
+  - Stripe for payment processing
+  - Google Cloud Vision API for document verification
+  - Google Maps API for location services
 
-**Use your preferred IDE**
+- **APIs and Services:**
+  - Stripe Connect for seller payments
+  - Google Cloud Vision API for OCR
+  - Google Maps for location services
+  - Walkscore API for neighborhood information
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Getting Started
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Prerequisites
 
-Follow these steps:
+- Node.js (v16 or higher)
+- npm or yarn
+- Supabase account
+- Stripe account
+- Google Cloud Platform account
+- Environment variables set up
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Installation
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd homeharmony-platform
+```
 
-# Step 3: Install the necessary dependencies.
-npm i
+2. Install dependencies:
+```bash
+npm install
+```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+3. Create a `.env` file in the root directory with the following variables:
+```env
+VITE_PUBLIC_SUPABASE_URL=your_supabase_url
+VITE_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
+VITE_STRIPE_PUBLISHABLE_KEY=your_stripe_key
+GOOGLE_APPLICATION_CREDENTIALS=path_to_credentials
+```
+
+4. Start the development server:
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+5. In a separate terminal, start the Express backend:
+```bash
+npm run server
+```
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Setting Up Stripe Connect
 
-**Use GitHub Codespaces**
+1. Create a Stripe account
+2. Enable Connect in your Stripe Dashboard
+3. Add your Stripe keys to the environment variables
+4. Set up webhook endpoints for handling Connect account events
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Project Structure
 
-## What technologies are used for this project?
+```
+├── src/
+│   ├── components/    # React components
+│   ├── pages/        # Route components
+│   ├── hooks/        # Custom React hooks
+│   ├── utils/        # Utility functions
+│   ├── types/        # TypeScript types
+│   └── integrations/ # Third-party service integrations
+├── server/
+│   ├── api/          # Express API routes
+│   └── utils/        # Server utilities
+└── public/           # Static assets
+```
 
-This project is built with .
+## Key Features Implementation
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Property Verification
+The platform uses Google Cloud Vision API for OCR (Optical Character Recognition) to verify lease documents. This ensures the authenticity of sublease listings by comparing extracted information with provided details.
 
-## How can I deploy this project?
+### Real-time Messaging
+Built using Supabase's real-time subscriptions, the chat system enables instant communication between buyers and sellers.
 
-Simply open [Lovable](https://lovable.dev/projects/d73db0ca-be97-409c-a895-24e449c550fb) and click on Share -> Publish.
+### Map Integration
+Properties can be browsed using an interactive map interface, with custom markers showing property details and filtering options.
 
-## I want to use a custom domain - is that possible?
+## Contributing
 
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- shadcn/ui for the component library
+- Tailwind CSS for styling
+- Supabase for backend services
+- Stripe for payment processing
+- Google Cloud Platform for various APIs
