@@ -178,6 +178,47 @@ export interface Database {
           }
         ];
       };
+      property_clicks: {
+        Row: {
+          id: string;
+          property_id: string;
+          user_id: string | null;
+          latitude: number | null;
+          longitude: number | null;
+          clicked_at: string;
+          created_at: string;
+        };
+        Insert: {
+          property_id: string;
+          user_id?: string | null;
+          latitude?: number | null;
+          longitude?: number | null;
+          clicked_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          property_id?: string;
+          user_id?: string | null;
+          latitude?: number | null;
+          longitude?: number | null;
+          clicked_at?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "property_clicks_property_id_fkey";
+            columns: ["property_id"];
+            referencedRelation: "properties";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "property_clicks_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       [_ in never]: never;

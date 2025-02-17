@@ -25,7 +25,8 @@ router.post('/', async (req, res) => {
           longitude: longitude || null,
           clicked_at: new Date().toISOString()
         }
-      ]);
+      ])
+      .select();
 
     if (error) throw error;
 
