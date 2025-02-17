@@ -2,6 +2,7 @@
 
 import express from 'express';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 
 const router = express.Router();
 
@@ -41,40 +42,54 @@ router.post('/', async (req, res) => {
 // Get popular properties for a location
 router.get('/popular', async (req, res) => {
   try {
-    const { latitude, longitude, radius = 50 } = req.query; // radius in kilometers
+    const { 
+      latitude, 
+      longitude, 
+      radius = 50 // radius in kilometers
+    } = req.query;
 
+    // Convert query parameters to numbers
+    const lat = latitude ? Number(latitude) : null;
+    const lng = longitude ? Number(longitude) : null;
+    const rad = Number(radius);
+
+    // Base query for popular properties
     let query = supabase
-      .from('property_clicks')
+      .from('properties')
       .select(`
-        property_id,
-        count(*) as click_count,
-        properties(*)
+        *,
+        property_clicks!inner (
+          count
+        )
       `)
-      .gt('clicked_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()) // Last 30 days
-      .group_by('property_id')
-      .order('count', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(10);
 
-    if (latitude && longitude) {
-      // If location is provided, filter by distance
-      // Note: This is a simplified distance calculation
+    if (lat !== null && lng !== null) {
+      // If location is provided, add location-based filters
+      // Convert kilometers to approximate degrees (1 degree ≈ 111km at equator)
+      const degreeRadius = rad / 111;
+      
       query = query
-        .gte('latitude', Number(latitude) - (radius/111))
-        .lte('latitude', Number(latitude) + (radius/111))
-        .gte('longitude', Number(longitude) - (radius/111))
-        .lte('longitude', Number(longitude) + (radius/111));
+        .gte('lat', lat - degreeRadius)
+        .lte('lat', lat + degreeRadius)
+        .gte('lng', lng - degreeRadius)
+        .lte('lng', lng + degreeRadius);
     }
 
     const { data, error } = await query;
 
     if (error) throw error;
 
+    // Transform the response to include click count
+    const transformedData = data.map(property => ({
+      ...property,
+      click_count: property.property_clicks?.length || 0
+    }));
+
     res.json({ 
       success: true, 
-      data: data.map(item => ({
-        ...item.properties,
-        click_count: item.click_count
-      }))
+      data: transformedData
     });
   } catch (error: any) {
     console.error('Error fetching popular properties:', error);

@@ -180,7 +180,7 @@ export default function HousingComplexes() {
   }, [filters, toast]);
 
   // Create a debounced version of fetchComplexes to prevent excessive requests.
-  const debouncedFetchComplexes = useDebounce(fetchComplexes, 500);
+  const debouncedFetchComplexes = useDebounce(fetchComplexes, 1500);
 
   // Fetch properties for a specific complex.
   const fetchPropertiesForComplex = async (complexId: string) => {

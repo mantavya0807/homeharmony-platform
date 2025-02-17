@@ -27,11 +27,10 @@ export function PropertyCard({
   sqft,
   unit,
   imageUrl,
+  roomTag, // Destructure the new prop
 }: PropertyCardProps) {
   const navigate = useNavigate();
 
- 
-  
   return (
     <Card 
       className="overflow-hidden transition-all duration-300 hover:shadow-lg animate-fadeIn cursor-pointer group relative"
@@ -44,6 +43,13 @@ export function PropertyCard({
             alt={title}
             className="object-contain w-full h-full transition-transform duration-300 group-hover:scale-110"
           />
+          {/* Room Tag Badge */}
+          {roomTag && (
+          <Badge className="absolute top-2 left-2 bg-secondary text-white text-xs font-semibold px-2 py-1 rounded">
+            {roomTag}
+          </Badge>
+        )}
+          {/* Price Badge */}
           <Badge className="absolute top-2 right-2 bg-primary">
             ${price.toLocaleString()}
           </Badge>
@@ -70,9 +76,9 @@ export function PropertyCard({
           <span className="text-sm">{sqft} sqft</span>
         </div>
         <div className="flex items-center gap-1">
-            <HashIcon size={16} />
-            <span className="text-sm">{unit} Unit</span>
-          </div> 
+          <HashIcon size={16} />
+          <span className="text-sm">{unit} Unit</span>
+        </div> 
       </CardFooter>
     </Card>
   );

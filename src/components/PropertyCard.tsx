@@ -1,20 +1,20 @@
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  MapPin,
-  Bed,
-  Bath,
-  Square,
-  Heart,
-  HashIcon,
-  CheckCircle,
-  Eye,
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { 
+  MapPin, 
+  Bed, 
+  Bath, 
+  Square, 
+  HashIcon, 
+  CheckCircle, 
+  AlertTriangle, 
+  Heart, 
+  Eye, 
+  Star 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
-import { useState, useEffect } from "react";
-import { useToast } from "@/components/ui/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Tooltip,
@@ -23,7 +23,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { trackPropertyClick } from "@/utils/trackPropertyClick";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface PropertyCardProps {
   id: string;
@@ -34,16 +33,18 @@ interface PropertyCardProps {
   baths: number;
   sqft: number;
   unit: string;
-  imageUrl: string;
-  roomTag?: string; // NEW: optional room tag for the image
+  imageUrl?: string;
+  roomTag?: string;
   sublease_from?: string;
   sublease_to?: string;
   is_verified?: boolean;
   views?: number;
-  // Seller info
   sellerId?: string;
   sellerName?: string;
   sellerAvatarUrl?: string;
+  sellerRating?: number;
+  isSaved?: boolean;
+  onSaveToggle?: () => Promise<void>;
 }
 
 export function PropertyCard({
@@ -55,117 +56,27 @@ export function PropertyCard({
   baths,
   sqft,
   unit,
-  imageUrl,
-  roomTag, // new prop
+  imageUrl = "/placeholder.jpg",
+  roomTag,
   sublease_from,
   sublease_to,
-  is_verified = false,
+  is_verified,
   views,
   sellerId,
   sellerName,
   sellerAvatarUrl,
+  sellerRating,
+  isSaved,
+  onSaveToggle
 }: PropertyCardProps) {
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const [isLiked, setIsLiked] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    checkIfLiked();
-  }, []);
-
-  const checkIfLiked = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
-
-      const { data: savedProperty } = await supabase
-        .from("saved_properties")
-        .select()
-        .eq("user_id", user.id)
-        .eq("property_id", id)
-        .single();
-
-      setIsLiked(!!savedProperty);
-    } catch (error) {
-      console.error("Error checking saved status:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLikeClick = async (e: React.MouseEvent) => {
+  const handleSellerClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        toast({
-          title: "Authentication required",
-          description: "Please sign in to save properties",
-          variant: "destructive",
-        });
-        navigate("/auth");
-        return;
-      }
-
-      if (isLiked) {
-        const { error } = await supabase
-          .from("saved_properties")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("property_id", id);
-
-        if (error) throw error;
-        setIsLiked(false);
-
-        toast({
-          title: "Property removed from saved list",
-          description: "You can always save it again later",
-        });
-      } else {
-        const { error } = await supabase.from("saved_properties").insert({
-          user_id: user.id,
-          property_id: id,
-        });
-
-        if (error) throw error;
-        setIsLiked(true);
-
-        toast({
-          title: "Property saved!",
-          description: "You can view it in your saved properties",
-        });
-      }
-    } catch (error) {
-      console.error("Error updating saved status:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update saved status",
-        variant: "destructive",
-      });
+    if (sellerId) {
+      navigate(`/seller/${sellerId}`);
     }
   };
-
-  const getSubLeaseDuration = () => {
-    if (!sublease_from || !sublease_to) return null;
-
-    const start = new Date(sublease_from);
-    const end = new Date(sublease_to);
-    const months =
-      (end.getFullYear() - start.getFullYear()) * 12 +
-      (end.getMonth() - start.getMonth());
-    return months;
-  };
-
-  const subleaseDuration = getSubLeaseDuration();
 
   const handleCardClick = async () => {
     try {
@@ -173,46 +84,42 @@ export function PropertyCard({
       navigate(`/properties/${id}`);
     } catch (error) {
       console.error("Error handling property click:", error);
-      // Navigate even if tracking fails
       navigate(`/properties/${id}`);
     }
   };
 
-  // Navigate to the seller’s page
-  const handleSellerClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // so it doesn’t trigger the property click
-    if (sellerId) {
-      navigate(`/seller/${sellerId}`);
-    }
-  };
-
   return (
-    <TooltipProvider>
-      <Card
-        className="group overflow-hidden transition-all duration-300 hover:shadow-lg animate-fadeIn cursor-pointer relative"
-        onClick={handleCardClick}
-      >
-        <CardHeader className="p-0">
-          <div className="relative h-48">
-            <img
-              src={imageUrl}
-              alt={title}
-              className="object-contain w-full h-full transition-transform duration-300 group-hover:scale-110"
-            />
-            {/* Price Badge (top right) */}
-            <Badge className="absolute top-2 right-2 bg-primary text-white px-3 py-1 rounded-full shadow-md">
-              ${price.toLocaleString()}
-            </Badge>
-            {/* Like Button (top left) */}
+    <Card
+      className="group overflow-hidden transition-all duration-300 hover:shadow-lg animate-fadeIn cursor-pointer relative"
+      onClick={handleCardClick}
+    >
+      <CardHeader className="p-0">
+        <div className="relative h-48">
+          <img
+            src={imageUrl}
+            alt={title}
+            className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-105"
+          />
+          
+          {/* Price Badge */}
+          <Badge className="absolute top-2 right-2 bg-primary text-white px-3 py-1 rounded-full shadow-md">
+            ${price.toLocaleString()}
+          </Badge>
+          
+          {/* Like Button */}
+          {onSaveToggle && (
             <AnimatePresence>
               <motion.button
                 className={cn(
-                  "absolute top-2 left-2 p-2 rounded-full",
+                  "absolute top-2 right-16 p-2 rounded-full",
                   "bg-background/80 backdrop-blur-sm",
                   "transition-colors hover:bg-background",
-                  isLiked ? "text-red-500" : "text-muted-foreground"
+                  isSaved ? "text-red-500" : "text-muted-foreground"
                 )}
-                onClick={handleLikeClick}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSaveToggle();
+                }}
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 whileTap={{ scale: 0.8 }}
@@ -222,20 +129,52 @@ export function PropertyCard({
                 <Heart
                   className={cn(
                     "h-5 w-5 transition-transform",
-                    isLiked ? "fill-current" : "stroke-current"
+                    isSaved ? "fill-current" : "stroke-current"
                   )}
                 />
               </motion.button>
             </AnimatePresence>
-            {/* NEW: Room Tag Badge (bottom left) */}
-            {roomTag && (
-              <Badge className="absolute bottom-2 left-2 bg-secondary text-white px-2 py-1 text-xs rounded shadow-md">
-                {roomTag}
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="p-4">
+          )}
+
+          {/* Room Tag */}
+          {roomTag && (
+            <Badge className="absolute bottom-2 left-2 bg-secondary text-white px-2 py-1 text-xs rounded shadow-md">
+              {roomTag}
+            </Badge>
+          )}
+
+          {/* Verification Status with Tooltip */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="absolute left-2 top-2 flex items-center bg-white/80 dark:bg-black/50 rounded-full px-2 py-0.5 space-x-1 text-sm cursor-help">
+                  {is_verified ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 text-blue-500" />
+                      <span className="text-blue-500">Verified</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                      <span className="text-yellow-500">Unverified</span>
+                    </>
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs p-3">
+                {is_verified ? (
+                  <p>This property's lease documents have been verified by our system. Rent, dates, and details match the original lease.</p>
+                ) : (
+                  <p>This property's lease documents are pending verification. Exercise caution and request documentation before proceeding.</p>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      </CardHeader>
+
+      <CardContent className="p-4">
+        <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold line-clamp-1">{title}</h3>
             {views !== undefined && (
@@ -251,69 +190,64 @@ export function PropertyCard({
             )}
           </div>
 
-          {/* Location row */}
-          <div className="flex items-center gap-1 mt-2 text-muted-foreground">
+          {/* Location */}
+          <div className="flex items-center gap-1 text-muted-foreground">
             <MapPin size={16} />
             <span className="text-sm line-clamp-1">{location}</span>
           </div>
 
-          {/* Sublease info */}
-          {subleaseDuration && (
-            <div className="mb-2">
-              <Badge variant="secondary">
-                {subleaseDuration} month{subleaseDuration !== 1 ? "s" : ""} sublease
-              </Badge>
-              <p className="text-xs text-muted-foreground mt-1">
-                {new Date(sublease_from!).toLocaleDateString()} -{" "}
-                {new Date(sublease_to!).toLocaleDateString()}
-              </p>
-            </div>
-          )}
-
-          {/* Seller info + verification */}
+          {/* Seller Info */}
           {sellerId && sellerName && (
-            <div
-              className="mt-3 flex items-center gap-2 cursor-pointer"
+            <div 
               onClick={handleSellerClick}
+              className="flex items-center gap-2 cursor-pointer hover:bg-accent/50 p-2 rounded-lg transition-colors mt-1"
             >
               <Avatar className="h-8 w-8">
-                <AvatarImage src={sellerAvatarUrl || ""} alt={sellerName} />
-                <AvatarFallback>
-                  {sellerName.length ? sellerName.charAt(0) : "?"}
-                </AvatarFallback>
+                <AvatarImage src={sellerAvatarUrl} alt={sellerName} />
+                <AvatarFallback>{sellerName.charAt(0).toUpperCase()}</AvatarFallback>
               </Avatar>
-              <div className="flex items-center gap-1">
+              <div className="flex flex-col">
                 <span className="text-sm font-medium">{sellerName}</span>
-                {is_verified && (
-                  <CheckCircle
-                    className="h-4 w-4 text-blue-500"
-                    title="Verified Seller"
-                  />
+                {sellerRating && (
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 mr-1" />
+                    {sellerRating.toFixed(1)} rating
+                  </div>
                 )}
               </div>
             </div>
           )}
-        </CardContent>
 
-        <CardFooter className="grid grid-cols-3 gap-4 p-4 border-t">
-          <div className="flex items-center gap-1">
-            <Bed size={16} />
-            <span className="text-sm">{beds} beds</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Bath size={16} />
-            <span className="text-sm">{baths} baths</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Square size={16} />
-            <span className="text-sm">{sqft} sqft</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <HashIcon size={16} />
-            <span className="text-sm">{unit} Unit</span>
-          </div> 
-        </CardFooter>
-      </Card>
-    </TooltipProvider>
+          {/* Sublease Period */}
+          {sublease_from && sublease_to && (
+            <div className="text-sm text-muted-foreground mt-1">
+              <span>Sublease period: </span>
+              <span className="font-medium">
+                {new Date(sublease_from).toLocaleDateString()} - {new Date(sublease_to).toLocaleDateString()}
+              </span>
+            </div>
+          )}
+        </div>
+      </CardContent>
+
+      <CardFooter className="grid grid-cols-4 gap-4 p-4 border-t">
+        <div className="flex items-center gap-1">
+          <Bed size={16} />
+          <span className="text-sm">{beds} beds</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Bath size={16} />
+          <span className="text-sm">{baths} baths</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Square size={16} />
+          <span className="text-sm">{sqft} sqft</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <HashIcon size={16} />
+          <span className="text-sm">{unit} Unit</span>
+        </div>
+      </CardFooter>
+    </Card>
   );
 }

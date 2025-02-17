@@ -241,6 +241,7 @@ export default function SellerDashboard() {
     console.log(`Removed media file: ${removed.file.name}`);
   };
 
+
   const uploadMedia = async (propertyId: string) => {
     const uploadPromises = mediaFiles.map(async (mediaFile, index) => {
       try {
@@ -470,6 +471,55 @@ export default function SellerDashboard() {
     }
   };
 
+
+
+  async function uploadPropertyMedia(propertyId, mediaFiles) {
+    try {
+      const categorizedMedia = {
+        bedroom: [],
+        living_room: [],
+        bathroom: [],
+        kitchen: [],
+        floorplan: [],
+        other: [],
+      };
+  
+      for (const [index, mediaFile] of mediaFiles.entries()) {
+        const fileExt = mediaFile.file.name.split('.').pop();
+        const fileName = `${propertyId}/${Date.now()}-${index}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from("property-media")
+          .upload(fileName, mediaFile.file, {
+            cacheControl: "3600",
+            upsert: true,
+          });
+  
+        if (uploadError) throw uploadError;
+  
+        const { data } = supabase.storage
+          .from("property-media")
+          .getPublicUrl(fileName);
+        
+        categorizedMedia[mediaFile.room].push(data.publicUrl);
+      }
+  
+      const { error } = await supabase
+        .from("property_media")
+        .insert([{ property_id: propertyId, ...categorizedMedia }]);
+  
+      if (error) throw error;
+  
+      console.log("Media URLs stored successfully in property_media table.");
+    } catch (error) {
+      console.error("Error uploading property media:", error);
+    }
+  }
+
+
+  
+  
+  
+
   const handleSubmit = async (e: React.FormEvent) => {
 
     e.preventDefault();
@@ -540,8 +590,9 @@ export default function SellerDashboard() {
       if (!data) throw new Error("Failed to create property");
       console.log("New property created:", data);
       if (mediaFiles.length > 0) {
-        console.log("Uploading media files...");
-        const mediaUrls = await uploadMedia(data.id);
+        await uploadPropertyMedia(data.id, mediaFiles);
+  // Optionally, update the property record if needed
+  const mediaUrls = mediaFiles.map(file => file.preview); // or however you want to handle it
         console.log("Updating property with media URLs...");
         const { error: updateError } = await supabase
           .from("properties")
@@ -1187,4 +1238,4 @@ export default function SellerDashboard() {
       )}
     </div>
   );
-}
+};
