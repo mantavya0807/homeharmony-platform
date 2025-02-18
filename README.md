@@ -14,7 +14,7 @@ HomeHarmony is a modern web application that facilitates property subleasing, co
 - ⭐ Receive and respond to reviews
 
 ## For Property Buyers
-- 🔍 Advanced property search with filters
+- 🔍 Advanced property sear ch with filters
 - 🗺️ Map-based property exploration
 - 💖 Save favorite properties
 - 💬 Chat with sellers
