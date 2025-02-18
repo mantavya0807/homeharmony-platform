@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const router = express.Router();
 
-// Initialize Gemini AI (dummy initialization for now)
+// Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'YOUR_GEMINI_API_KEY');
 
 interface ExtractedInfo {
@@ -11,12 +11,33 @@ interface ExtractedInfo {
   city?: string;
   state?: string;
   zip?: string;
-  originalRent?: number;
-  leaseTerm?: number;
+  originalRent?: number | null;
+  leaseTerm?: number | null;
   startDate?: string;
   endDate?: string;
   leaseType?: string;
-  propertyType?: string;
+  propertyType?: string | null;
+}
+
+interface RefinedResponse {
+  refinedScore: number;
+  refinedMatches: {
+    address: boolean;
+    city: boolean;
+    state: boolean;
+    zip: boolean;
+    price: boolean;
+    leaseInfo: boolean;
+  };
+  leaseInfo: {
+    originalRent: number | null;
+    leaseTerm: number | null;
+    startDate: string | null;
+    endDate: string | null;
+    rentDifferential: number | null;
+    propertyType: string | null;
+    leaseType: string | null;
+  };
 }
 
 /**
@@ -138,7 +159,7 @@ router.post('/refine', async (req, res) => {
       startDate: '8/1/2024',
       endDate: '8/5/2025',
       leaseType: 'residential',
-      propertyType: null,
+      propertyType: 'apartment', // Changed from null to string
     };
 
     console.log('[Gemini] Successfully parsed extracted information:', extractedInfo);
@@ -161,7 +182,7 @@ router.post('/refine', async (req, res) => {
     }, 0);
 
     // Calculate rent differential if possible.
-    let rentDifferential = null;
+    let rentDifferential: number | null = null;
     if (extractedInfo.originalRent && propertyDetails.price) {
       rentDifferential =
         ((parseFloat(propertyDetails.price) - extractedInfo.originalRent) / extractedInfo.originalRent) *
@@ -170,17 +191,17 @@ router.post('/refine', async (req, res) => {
       rentDifferential = Math.max(Math.min(rentDifferential, 999.99), -999.99);
     }
 
-    const responseObj = {
+    const responseObj: RefinedResponse = {
       refinedScore,
       refinedMatches,
       leaseInfo: {
-        originalRent: extractedInfo.originalRent,
-        leaseTerm: extractedInfo.leaseTerm,
-        startDate: extractedInfo.startDate,
-        endDate: extractedInfo.endDate,
+        originalRent: extractedInfo.originalRent || null,
+        leaseTerm: extractedInfo.leaseTerm || null,
+        startDate: extractedInfo.startDate || null,
+        endDate: extractedInfo.endDate || null,
         rentDifferential,
-        propertyType: extractedInfo.propertyType,
-        leaseType: extractedInfo.leaseType,
+        propertyType: extractedInfo.propertyType || null,
+        leaseType: extractedInfo.leaseType || null,
       },
     };
 
