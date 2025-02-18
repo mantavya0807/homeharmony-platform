@@ -1,4 +1,4 @@
-# HomeHarmony - Property Sublease Platform
+# Sub-Space - Property Sublease Platform
 
 HomeHarmony is a modern web application that facilitates property subleasing, connecting property sellers with potential buyers. Built with React, TypeScript, and Supabase, it offers a comprehensive suite of features for managing and discovering property listings.
 
