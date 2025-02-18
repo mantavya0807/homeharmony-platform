@@ -1,174 +1,252 @@
-// HousingComplexes.tsx
-import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
-import { useToast } from '@/components/ui/use-toast';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Loader2, StarIcon, StarHalf } from 'lucide-react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  FormEvent,
+} from "react";
+import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/components/ui/use-toast";
+import { useTheme } from "next-themes";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import ImageGallery from '@/components/ImageGallery';
-import { HousingComplexesFilter, Filters, AMENITIES } from '@/components/HousingComplexesFilter';
+} from "@/components/ui/dialog";
+import { HousingComplexesFilter } from "@/components/HousingComplexesFilter";
+import { ComplexCard } from "@/components/ComplexCard";
 
-// Custom hook to debounce a function
-const useDebounce = (func: (...args: any[]) => void, delay: number) => {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+/* ---------------- Debounce Hook ---------------- */
+function useDebounce<T extends (...args: any[]) => void>(func: T, delay: number) {
+  const timeoutRef = useRef<number | null>(null);
 
-  const debouncedFunction = useCallback((...args: any[]) => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    timeoutRef.current = setTimeout(() => {
-      func(...args);
-    }, delay);
-  }, [func, delay]);
-
+  const debouncedFunction = useCallback(
+    (...args: Parameters<T>) => {
+      if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = window.setTimeout(() => {
+        func(...args);
+      }, delay);
+    },
+    [func, delay]
+  );
   return debouncedFunction;
-};
+}
 
-// RatingStars displays 5 stars (filled, half, or empty) based on the rating (out of 5)
-// and shows the numeric average rating next to them.
-const RatingStars = memo(({ rating }: { rating: number }) => {
-  const fullStars = Math.floor(rating);
-  const hasHalfStar = rating - fullStars >= 0.5;
-  const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
-
-  return (
-    <div className="flex items-center">
-      {[...Array(fullStars)].map((_, i) => (
-        <StarIcon key={`full-${i}`} className="w-4 h-4 text-yellow-500" />
+/* ---------------- Animated Loader Component ---------------- */
+const Loader = () => (
+  <div className="flex items-center justify-center h-64">
+    <motion.div className="flex space-x-2">
+      {[...Array(3)].map((_, i) => (
+        <motion.div
+          key={i}
+          className="w-4 h-4 bg-blue-500 dark:bg-blue-300 rounded-full"
+          animate={{ opacity: [0.2, 1, 0.2], scale: [1, 1.5, 1] }}
+          transition={{
+            duration: 0.8,
+            repeat: Infinity,
+            delay: i * 0.2,
+            ease: "easeInOut",
+          }}
+        />
       ))}
-      {hasHalfStar && <StarHalf key="half" className="w-4 h-4 text-yellow-500" />}
-      {[...Array(emptyStars)].map((_, i) => (
-        <StarIcon key={`empty-${i}`} className="w-4 h-4 text-gray-300" />
-      ))}
-      <span className="ml-2 text-sm">({rating.toFixed(1)}/5)</span>
-    </div>
-  );
-});
+    </motion.div>
+  </div>
+);
 
-// Simple star rating input component
-const StarRatingInput = memo(({
-  rating,
-  onRatingChange,
+/* ---------------- Review Modal Component ---------------- */
+function ReviewModal({
+  isOpen,
+  onClose,
+  onSubmit,
 }: {
-  rating: number;
-  onRatingChange: (rating: number) => void;
-}) => {
-  return (
-    <div>
-      <input
-        type="number"
-        value={rating}
-        onChange={(e) => onRatingChange(Number(e.target.value))}
-        min={0}
-        max={5}
-        step={0.5}
-        className="border rounded p-1"
-      />
-    </div>
-  );
-});
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (rating: number, reviewText: string) => void;
+}) {
+  const [rating, setRating] = useState(0);
+  const [reviewText, setReviewText] = useState("");
 
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    onSubmit(rating, reviewText);
+    setRating(0);
+    setReviewText("");
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md p-6 md:p-8 bg-white dark:bg-gray-800 border border-blue-500 rounded-xl shadow-2xl">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-bold text-center">
+            Submit Your Review
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <div>
+            <Label className="block mb-1 font-semibold">Rating (0-5)</Label>
+            <Input
+              type="number"
+              value={rating}
+              onChange={(e) => setRating(Number(e.target.value))}
+              min={0}
+              max={5}
+              step={0.5}
+              className="w-full border border-blue-500 rounded-md focus:ring-2 focus:ring-blue-500 text-sm"
+              required
+            />
+          </div>
+          <div>
+            <Label className="block mb-1 font-semibold">Review</Label>
+            <textarea
+              value={reviewText}
+              onChange={(e) => setReviewText(e.target.value)}
+              className="w-full p-3 border border-blue-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              required
+            />
+          </div>
+          <Button
+            type="submit"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white transition-colors duration-300"
+          >
+            Submit Review
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ---------------- Main HousingComplexes Component ---------------- */
 export default function HousingComplexes() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [complexes, setComplexes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedComplex, setSelectedComplex] = useState<any>(null);
-  const [selectedComplexProperties, setSelectedComplexProperties] = useState<any[]>([]);
-  const [newReview, setNewReview] = useState({ rating: 0, review_text: "" });
-  const [submittingReview, setSubmittingReview] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [filters, setFilters] = useState<Filters>({
-    city: '',
-    state: '',
-    zip_code: '',
-    amenities: []
-  });
+  const { theme } = useTheme();
 
-  // Fetch housing complexes data along with reviews and photos.
+  // States for complexes, loading, user role, and filters
+  const [complexes, setComplexes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [filters, setFilters] = useState({ search: "", amenities: [] });
+
+  // States for review modal
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [currentReviewComplexId, setCurrentReviewComplexId] =
+    useState<string | null>(null);
+
+  // Mouse position for background glow
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const complexesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      // If you want the glow to follow the cursor across the entire window,
+      // you can remove complexesRef.current's bounding rect usage.
+      setMousePosition({
+        x: e.clientX,
+        y: e.clientY,
+      });
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
+
+  // Create a dynamic glow effect that follows the cursor across the entire page
+  const getGlowStyles = () => {
+    const lightGlow = `radial-gradient(circle 700px at ${mousePosition.x}px ${mousePosition.y}px, rgba(66, 153, 225, 0.3), transparent 80%)`;
+    const darkGlow = `radial-gradient(circle 700px at ${mousePosition.x}px ${mousePosition.y}px, rgba(30, 58, 138, 0.3), transparent 80%)`;
+    return {
+      background: theme === "dark" ? darkGlow : lightGlow,
+      transition: "background 0.3s ease",
+    };
+  };
+
+  /* ---------------- Fetch Complexes (with properties count) ---------------- */
   const fetchComplexes = useCallback(async () => {
     try {
       setLoading(true);
+      // Fetch housing complexes with related reviews and photos.
       let query = supabase
         .from("housing_complexes")
-        .select(`
+        .select(
+          `
           *,
           housing_complex_reviews (
-            id,
-            rating,
-            review_text,
-            created_at,
-            user_id,
-            profiles (
-              full_name
-            )
+            id, rating, review_text, created_at, user_id,
+            profiles ( full_name )
           ),
           housing_complex_photos (
-            id,
-            photo_url,
-            created_at
+            id, photo_url, created_at
           )
-        `);
+          `
+        );
 
-      if (filters.city) query = query.ilike('city', `%${filters.city}%`);
-      if (filters.state) query = query.ilike('state', `%${filters.state}%`);
-      if (filters.zip_code) query = query.ilike('zip_code', `%${filters.zip_code}%`);
-      filters.amenities.forEach(amenity => {
-        query = query.eq(amenity, true);
-      });
+      if (filters.search) {
+        query = query.or(
+          `name.ilike.%${filters.search}%,city.ilike.%${filters.search}%,state.ilike.%${filters.search}%,zip_code.ilike.%${filters.search}%`
+        );
+      }
 
-      const { data, error } = await query;
+      // If you have amenities columns, filter them here:
+      // filters.amenities.forEach((amenity: string) => {
+      //   query = query.eq(amenity.toLowerCase(), true);
+      // });
+
+      const { data: complexesData, error } = await query;
       if (error) throw error;
 
-      const complexesWithDetails = (data || []).map((complex: any) => {
-        const reviews = complex.housing_complex_reviews?.map((review: any) => ({
-          id: review.id,
-          rating: review.rating,
-          review_text: review.review_text,
-          created_at: review.created_at,
-          user: {
-            full_name: review.profiles?.full_name || "Anonymous",
-          },
-        })) || [];
+      // Fetch properties data.
+      const { data: propertiesData, error: propertiesError } = await supabase
+        .from("properties")
+        .select("*");
+      if (propertiesError) throw propertiesError;
 
-        const average_rating = reviews.length > 0
-          ? reviews.reduce((acc: number, review: any) => acc + review.rating, 0) / reviews.length
-          : 0;
+      // Group properties by housing_complex_id.
+      const groupedProperties = (propertiesData || []).reduce(
+        (acc: Record<string, any[]>, prop: any) => {
+          const complexId = prop.housing_complex_id;
+          if (complexId) {
+            if (!acc[complexId]) {
+              acc[complexId] = [];
+            }
+            acc[complexId].push(prop);
+          }
+          return acc;
+        },
+        {}
+      );
 
+      // Map complexes with reviews, average rating, and associated properties.
+      const complexesWithDetails = (complexesData || []).map((complex: any) => {
+        const reviews =
+          complex.housing_complex_reviews?.map((review: any) => ({
+            id: review.id,
+            rating: review.rating,
+            review_text: review.review_text,
+            created_at: review.created_at,
+            user: { full_name: review.profiles?.full_name || "Anonymous" },
+          })) || [];
+        const average_rating =
+          reviews.length > 0
+            ? reviews.reduce((acc: number, rev: any) => acc + rev.rating, 0) /
+              reviews.length
+            : 0;
         return {
           ...complex,
           reviews,
           average_rating,
+          properties: groupedProperties[complex.id] || [],
         };
       });
 
       setComplexes(complexesWithDetails);
     } catch (error: any) {
-      console.error("Error:", error);
+      console.error("Error fetching complexes:", error);
       toast({
         title: "Error",
         description: "Failed to load housing complexes",
@@ -179,44 +257,29 @@ export default function HousingComplexes() {
     }
   }, [filters, toast]);
 
-  // Create a debounced version of fetchComplexes to prevent excessive requests.
-  const debouncedFetchComplexes = useDebounce(fetchComplexes, 1500);
+  const debouncedFetchComplexes = useDebounce(fetchComplexes, 600);
 
-  // Fetch properties for a specific complex.
-  const fetchPropertiesForComplex = async (complexId: string) => {
+  useEffect(() => {
+    debouncedFetchComplexes();
+  }, [filters, debouncedFetchComplexes]);
+
+  useEffect(() => {
+    const getUserRole = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setUserRole(user ? "buyer" : null);
+    };
+    getUserRole();
+  }, []);
+
+  // ---------------- Handle Review Submission ----------------
+  const handleReviewSubmit = async (rating: number, reviewText: string) => {
+    if (!currentReviewComplexId) return;
     try {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('housing_complex_id', complexId);
-
-      if (error) throw error;
-      setSelectedComplexProperties(data || []);
-    } catch (error) {
-      console.error('Error fetching properties:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load properties",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // When a complex is selected, load its properties.
-  const handleComplexSelect = async (complex: any) => {
-    setSelectedComplex(complex);
-    await fetchPropertiesForComplex(complex.id);
-  };
-
-  // Handle review submission.
-  const handleReviewSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedComplex) return;
-
-    try {
-      setSubmittingReview(true);
-      const { data: { user } } = await supabase.auth.getUser();
-
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         toast({
           title: "Error",
@@ -225,242 +288,110 @@ export default function HousingComplexes() {
         });
         return;
       }
-
-      const { error } = await supabase
-        .from('housing_complex_reviews')
-        .insert({
-          complex_id: selectedComplex.id,
-          user_id: user.id,
-          rating: newReview.rating,
-          review_text: newReview.review_text,
-        });
-
+      const { error } = await supabase.from("housing_complex_reviews").insert({
+        complex_id: currentReviewComplexId,
+        user_id: user.id,
+        rating: rating,
+        review_text: reviewText,
+      });
       if (error) throw error;
-
       toast({
         title: "Success",
         description: "Review submitted successfully",
       });
-
-      // Refresh the complexes data after review submission.
-      await fetchComplexes();
-      setNewReview({ rating: 0, review_text: "" });
+      fetchComplexes();
+      setReviewModalOpen(false);
     } catch (error: any) {
-      console.error('Error submitting review:', error);
+      console.error("Error submitting review:", error);
       toast({
         title: "Error",
         description: "Failed to submit review",
         variant: "destructive",
       });
-    } finally {
-      setSubmittingReview(false);
     }
   };
 
-  // Fetch complexes on mount and whenever filters change.
-  useEffect(() => {
-    debouncedFetchComplexes();
-  }, [filters, debouncedFetchComplexes]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6">Housing Complexes</h1>
-
-      {/* Filters */}
-      <HousingComplexesFilter
-        filters={filters}
-        onFilterChange={setFilters}
+    <div
+      ref={complexesRef}
+      className="relative min-h-screen overflow-hidden bg-gray-50 dark:bg-gray-900 pt-20 pb-8"
+    >
+      {/* Full-Page Background Glow */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0"
+        style={getGlowStyles()}
       />
 
-      {/* Complex Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {complexes.map((complex) => (
-          <Card key={complex.id} className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-0">
-              {/* Complex Photos */}
-              {complex.housing_complex_photos && complex.housing_complex_photos.length > 0 ? (
-                <ImageGallery photos={complex.housing_complex_photos.map((photo: any) => photo.photo_url)} />
-              ) : (
-                <div className="h-48 bg-muted flex items-center justify-center">
-                  <p className="text-muted-foreground">No photos available</p>
-                </div>
-              )}
+      {/* Main Content */}
+      <div className="container mx-auto px-2 md:px-4 lg:px-8 relative z-10">
+        <motion.h1
+          className="mb-8 text-center text-4xl font-extrabold bg-gradient-to-r from-blue-800 via-blue-600 to-blue-400 bg-clip-text text-transparent drop-shadow-lg"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+        >
+          Housing Complexes
+        </motion.h1>
 
-              <div className="p-6">
-                <h3 className="text-xl font-semibold mb-2">{complex.name}</h3>
-                <p className="text-muted-foreground mb-4">{complex.address}</p>
+        {/* Filters Section */}
+        <motion.div
+          className="relative z-10 mb-6"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+        >
+          <HousingComplexesFilter filters={filters} onFilterChange={setFilters} />
+        </motion.div>
 
-                {/* Rating Display */}
-                <div className="mb-4">
-                  <RatingStars rating={complex.average_rating} />
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {complex.reviews.length} reviews
-                  </p>
-                </div>
+        {/* Review Modal for Buyers */}
+        {userRole === "buyer" && (
+          <ReviewModal
+            isOpen={reviewModalOpen}
+            onClose={() => setReviewModalOpen(false)}
+            onSubmit={handleReviewSubmit}
+          />
+        )}
 
-                {/* Amenities */}
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {Object.entries(AMENITIES).map(([key, label]) => (
-                    complex[key] && (
-                      <Badge key={key} variant="secondary">
-                        {label}
-                      </Badge>
-                    )
-                  ))}
-                </div>
+        {/* Complexes Grid / Loader */}
+        {loading ? (
+          <Loader />
+        ) : (
+          <motion.div
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8"
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: { opacity: 0, y: 20 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { delayChildren: 0.3, staggerChildren: 0.1 },
+              },
+            }}
+          >
+            {complexes.map((complex) => (
+              <motion.div
+                key={complex.id}
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  visible: { opacity: 1, y: 0 },
+                }}
+              >
+                <ComplexCard
+                  complex={complex}
+                  userRole={userRole}
+                  onSelect={fetchComplexes}
+                />
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </div>
 
-                {/* View Details Button */}
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      className="w-full"
-                      onClick={() => handleComplexSelect(complex)}
-                    >
-                      View Details
-                    </Button>
-                  </DialogTrigger>
-
-                  {/* Complex Details Dialog */}
-                  {selectedComplex?.id === complex.id && (
-                    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>{complex.name}</DialogTitle>
-                      </DialogHeader>
-
-                      <div className="space-y-6">
-                        {/* About Section */}
-                        <section>
-                          <h3 className="text-lg font-semibold mb-2">About</h3>
-                          <p className="text-muted-foreground">{complex.description}</p>
-                        </section>
-
-                        {/* Properties Section */}
-                        <section>
-                          <h3 className="text-lg font-semibold mb-4">Available Properties</h3>
-                          {selectedComplexProperties.length > 0 ? (
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Title</TableHead>
-                                  <TableHead>Type</TableHead>
-                                  <TableHead>Price</TableHead>
-                                  <TableHead>Beds</TableHead>
-                                  <TableHead>Baths</TableHead>
-                                  <TableHead>Sq.ft</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {selectedComplexProperties.map((property) => (
-                                  <TableRow 
-                                    key={property.id}
-                                    className="cursor-pointer hover:bg-accent"
-                                    onClick={() => navigate(`/properties/${property.id}`)}
-                                  >
-                                    <TableCell>{property.title}</TableCell>
-                                    <TableCell className="capitalize">{property.property_type}</TableCell>
-                                    <TableCell>${property.price.toLocaleString()}</TableCell>
-                                    <TableCell>{property.bedrooms}</TableCell>
-                                    <TableCell>{property.bathrooms}</TableCell>
-                                    <TableCell>{property.square_feet}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          ) : (
-                            <p className="text-muted-foreground">No properties available</p>
-                          )}
-                        </section>
-
-                        {/* Reviews Section */}
-                        <section>
-                          <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold">Reviews</h3>
-                            {userRole === 'buyer' && (
-                              <Button onClick={() => setNewReview({ rating: 0, review_text: "" })}>
-                                Write a Review
-                              </Button>
-                            )}
-                          </div>
-
-                          {/* Review Form */}
-                          {userRole === 'buyer' && (
-                            <form onSubmit={handleReviewSubmit} className="mb-6 space-y-4">
-                              <div className="space-y-2">
-                                <Label>Rating</Label>
-                                <StarRatingInput
-                                  rating={newReview.rating}
-                                  onRatingChange={(rating) =>
-                                    setNewReview(prev => ({ ...prev, rating }))
-                                  }
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label>Review</Label>
-                                <Textarea
-                                  value={newReview.review_text}
-                                  onChange={(e) =>
-                                    setNewReview(prev => ({ ...prev, review_text: e.target.value }))
-                                  }
-                                  placeholder="Write your review here..."
-                                  required
-                                />
-                              </div>
-                              <Button type="submit" disabled={submittingReview}>
-                                {submittingReview ? (
-                                  <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Submitting...
-                                  </>
-                                ) : (
-                                  "Submit Review"
-                                )}
-                              </Button>
-                            </form>
-                          )}
-
-                          {/* Reviews List */}
-                          <div className="space-y-4">
-                            {complex.reviews.map((review) => (
-                              <Card key={review.id}>
-                                <CardHeader>
-                                  <div className="flex justify-between items-start">
-                                    <div>
-                                      <CardTitle className="text-base">
-                                        {review.user.full_name}
-                                      </CardTitle>
-                                      <RatingStars rating={review.rating} />
-                                    </div>
-                                    <span className="text-sm text-muted-foreground">
-                                      {new Date(review.created_at).toLocaleDateString()}
-                                    </span>
-                                  </div>
-                                </CardHeader>
-                                <div className="p-4">
-                                  <p className="text-muted-foreground">
-                                    {review.review_text}
-                                  </p>
-                                </div>
-                              </Card>
-                            ))}
-                          </div>
-                        </section>
-                      </div>
-                    </DialogContent>
-                  )}
-                </Dialog>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      {/* Decorative Background Elements */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
+        <div className="absolute -top-40 -right-40 h-96 w-96 rounded-full bg-gradient-to-br from-blue-100 to-transparent dark:from-blue-500/10 dark:to-transparent blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 h-96 w-96 rounded-full bg-gradient-to-tr from-blue-50 to-transparent dark:from-blue-500/10 dark:to-transparent blur-3xl" />
       </div>
     </div>
   );

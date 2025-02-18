@@ -1,37 +1,46 @@
 // src/components/ImageGallery.tsx
 
-import React from 'react'
-import { Swiper, SwiperSlide } from 'swiper/react'
-import 'swiper/css'
-import 'swiper/css/navigation'
-import 'swiper/css/pagination'
-import { Navigation, Pagination } from 'swiper/modules'
+import React from 'react';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Navigation, Pagination } from 'swiper/modules';
+import 'swiper/css';
+import 'swiper/css/navigation';
+import 'swiper/css/pagination';
 
 interface ImageGalleryProps {
-  photos: string[]
+  photos: string[];
+  className?: string;
 }
 
-const ImageGallery: React.FC<ImageGalleryProps> = ({ photos }) => {
+const ImageGallery: React.FC<ImageGalleryProps> = ({ photos, className }) => {
+  if (!photos || photos.length === 0) {
+    return (
+      <div className="h-40 w-full bg-muted flex items-center justify-center rounded-t-lg">
+        <p className="text-muted-foreground">No photos available</p>
+      </div>
+    );
+  }
+
   return (
     <Swiper
       modules={[Navigation, Pagination]}
       navigation
       pagination={{ clickable: true }}
-      spaceBetween={10}
+      spaceBetween={0}
       slidesPerView={1}
-      className="w-full h-40 rounded-md mb-4"
+      className={`w-full ${className ? className : "h-40"} rounded-t-lg relative overflow-hidden`}
     >
       {photos.map((url, index) => (
-        <SwiperSlide key={index}>
+        <SwiperSlide key={index} className="w-full h-full">
           <img
             src={url}
-            alt={`Housing Complex Photo ${index + 1}`}
-            className="w-full h-full object-cover rounded-md"
+            alt={`Property Photo ${index + 1}`}
+            className="w-full h-full object-cover"
           />
         </SwiperSlide>
       ))}
     </Swiper>
-  )
-}
+  );
+};
 
-export default ImageGallery
+export default ImageGallery;

@@ -13,11 +13,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Database } from "@/integrations/supabase/types";
 import AddHousingComplex from "@/components/AddHousingComplex";
-import { AddressInput } from "@/components/AddressInput"; // Import your existing AddressInput component
-import RoomTypeInput from "@/components/RoomTypeInput"; // Import RoomTypeInput component
+import { AddressInput } from "@/components/AddressInput";
+import RoomTypeInput from "@/components/RoomTypeInput";
+import { useTheme } from "next-themes";
 
 const VERIFICATION_API_URL = "http://localhost:4000/api/verify-document";
 
@@ -43,8 +50,11 @@ interface EditPropertyDialogProps {
   onUpdate: (updatedProperty: Property) => void;
 }
 
-// Add new interface for form state
-interface PropertyForm extends Omit<Property, 'price' | 'bedrooms' | 'bathrooms' | 'square_feet'> {
+interface PropertyForm
+  extends Omit<
+    Property,
+    "price" | "bedrooms" | "bathrooms" | "square_feet" | "images"
+  > {
   price: string;
   bedrooms: string;
   bathrooms: string;
@@ -64,17 +74,22 @@ export const EditPropertyDialog = ({
   onUpdate,
 }: EditPropertyDialogProps) => {
   const { toast } = useToast();
+  const { theme } = useTheme();
+
+  // Loading state for updates
   const [loading, setLoading] = useState(false);
+
+  // Housing complexes data
   const [housingComplexes, setHousingComplexes] = useState<HousingComplex[]>([]);
   const [addComplexOpen, setAddComplexOpen] = useState(false);
 
-  // Initialize with default values; update in useEffect
-  const [updatedProperty, setUpdatedProperty] = useState({
+  // Property form state
+  const [updatedProperty, setUpdatedProperty] = useState<PropertyForm>({
     title: "",
     description: "",
     price: "",
     address: "",
-    unit:"",
+    unit: "",
     city: "",
     state: "",
     zip_code: "",
@@ -85,10 +100,33 @@ export const EditPropertyDialog = ({
     property_type: "house",
   });
 
+  // Media
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [existingMedia, setExistingMedia] = useState<string[]>([]);
   const [verificationDocument, setVerificationDocument] = useState<File | null>(null);
 
+  // Mouse position for glow effect
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  };
+
+  const getGlowStyles = () => {
+    const lightGlow = `radial-gradient(circle 400px at ${mousePos.x}px ${mousePos.y}px,
+      rgba(30, 64, 175, 0.15),
+      rgba(59, 130, 246, 0.1),
+      transparent)`;
+    const darkGlow = `radial-gradient(circle 400px at ${mousePos.x}px ${mousePos.y}px,
+      rgba(66, 153, 225, 0.15),
+      transparent)`;
+    return {
+      background: theme === "dark" ? darkGlow : lightGlow,
+      opacity: 0.7,
+    };
+  };
+
+  // Fetch housing complexes and set initial property data
   useEffect(() => {
     const fetchHousingComplexes = async () => {
       try {
@@ -96,7 +134,6 @@ export const EditPropertyDialog = ({
           .from("housing_complexes")
           .select("*")
           .order("name", { ascending: true });
-
         if (error) throw error;
         setHousingComplexes(data || []);
       } catch (error) {
@@ -130,13 +167,12 @@ export const EditPropertyDialog = ({
         });
         setExistingMedia(property.images || []);
       } else {
-        // Reset if no property is provided
         setUpdatedProperty({
           title: "",
           description: "",
           price: "",
           address: "",
-          unit:"",
+          unit: "",
           city: "",
           state: "",
           zip_code: "",
@@ -152,11 +188,17 @@ export const EditPropertyDialog = ({
     }
   }, [isOpen, property, toast]);
 
+  // Handle adding a new housing complex
+  const handleAddComplex = (newComplex: HousingComplex) => {
+    setHousingComplexes((prev) => [...prev, newComplex]);
+    setUpdatedProperty((prev) => ({ ...prev, housing_complex_id: newComplex.id }));
+    setAddComplexOpen(false);
+  };
+
+  // Verification document handling
   const handleVerificationUpload = async (file: File) => {
     if (!property?.id) return;
-
     try {
-      // Upload to Supabase first
       const timestamp = Date.now();
       const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
       const filePath = `${property.id}/${timestamp}-${sanitizedFileName}`;
@@ -168,14 +210,12 @@ export const EditPropertyDialog = ({
           contentType: file.type,
           upsert: true,
         });
-
       if (uploadError) throw uploadError;
 
       const { data: publicUrlData } = supabase.storage
         .from("property-verifications")
         .getPublicUrl(filePath);
 
-      // Update with document URL first
       await supabase
         .from("properties")
         .update({
@@ -184,7 +224,7 @@ export const EditPropertyDialog = ({
         })
         .eq("id", property.id);
 
-      // Try verification service, but don't block on failure
+      // Attempt external verification service (non-blocking)
       try {
         const propertyDetails = {
           address: updatedProperty.address,
@@ -203,14 +243,11 @@ export const EditPropertyDialog = ({
           method: "POST",
           body: formData,
         });
-
         if (!response.ok) {
           throw new Error(`Verification service error: ${response.status}`);
         }
 
         const verificationResult: VerificationResult = await response.json();
-
-        // Update verification status if service succeeded
         await supabase
           .from("properties")
           .update({
@@ -235,7 +272,6 @@ export const EditPropertyDialog = ({
             : "Document requires manual verification",
           variant: verificationResult.is_verified ? "default" : "warning",
         });
-
       } catch (verifyError) {
         console.error("Verification service error:", verifyError);
         toast({
@@ -255,8 +291,8 @@ export const EditPropertyDialog = ({
     }
   };
 
+  // Main property update
   const handleEditProperty = async () => {
-    // Validate property existence and ID
     if (!property?.id) {
       toast({
         title: "Error",
@@ -265,19 +301,17 @@ export const EditPropertyDialog = ({
       });
       return;
     }
-  
     try {
       setLoading(true);
-  
-      // Handle verification document if provided
+
+      // Upload verification doc if present
       if (verificationDocument) {
         await handleVerificationUpload(verificationDocument);
       }
-  
-      // Validate housing_complex_id
+
+      // Validate or clear housing complex
       let validatedHousingComplexId: string | null = null;
       if (updatedProperty.housing_complex_id) {
-        // Basic UUID check (more robust validation might be needed)
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (uuidRegex.test(updatedProperty.housing_complex_id)) {
           validatedHousingComplexId = updatedProperty.housing_complex_id;
@@ -291,8 +325,7 @@ export const EditPropertyDialog = ({
           return;
         }
       }
-  
-      // Create update payload with proper type checking
+
       const updatePayload = {
         title: updatedProperty.title,
         description: updatedProperty.description,
@@ -306,44 +339,41 @@ export const EditPropertyDialog = ({
         state: updatedProperty.state,
         zip_code: updatedProperty.zip_code,
         property_type: updatedProperty.property_type,
-        housing_complex_id: validatedHousingComplexId, // Use validated ID
+        housing_complex_id: validatedHousingComplexId,
       };
-  
+
       // Update property details
       const { error: updateError } = await supabase
         .from("properties")
         .update(updatePayload)
         .eq("id", property.id);
-  
       if (updateError) throw updateError;
-  
-      // Handle media updates
+
+      // Handle new media uploads
       if (mediaFiles.length > 0) {
         const uploadedUrls = await uploadMedia(property.id);
         const updatedImages = [...existingMedia, ...uploadedUrls];
-  
         const { error: mediaUpdateError } = await supabase
           .from("properties")
           .update({ images: updatedImages })
           .eq("id", property.id);
-  
         if (mediaUpdateError) throw mediaUpdateError;
       }
-  
-      // Fetch updated property data
+
+      // Fetch updated property
       const { data: updatedPropertyData, error: fetchError } = await supabase
         .from("properties")
         .select("*")
         .eq("id", property.id)
         .single();
-  
       if (fetchError) throw fetchError;
-  
+
       toast({
         title: "Success",
         description: "Property updated successfully",
       });
-  
+
+      // Pass updated data to parent
       onUpdate(updatedPropertyData);
       onClose();
     } catch (error: any) {
@@ -357,8 +387,8 @@ export const EditPropertyDialog = ({
       setLoading(false);
     }
   };
-  
 
+  // Upload new media files
   const uploadMedia = async (propertyId: string) => {
     const uploadPromises = mediaFiles.map(async (mediaFile, index) => {
       const fileExt = mediaFile.file.name.split(".").pop();
@@ -371,15 +401,15 @@ export const EditPropertyDialog = ({
         });
       if (uploadError) throw uploadError;
 
-      const { data: publicUrlData } =
-        supabase.storage.from("property-media").getPublicUrl(fileName);
-
+      const { data: publicUrlData } = supabase.storage
+        .from("property-media")
+        .getPublicUrl(fileName);
       return publicUrlData.publicUrl;
     });
-
     return await Promise.all(uploadPromises);
   };
 
+  // Handle file selection for media
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     files.forEach((file) => {
@@ -391,7 +421,6 @@ export const EditPropertyDialog = ({
         });
         return;
       }
-
       const reader = new FileReader();
       reader.onloadend = () => {
         setMediaFiles((prev) => [...prev, { file, preview: reader.result as string }]);
@@ -400,17 +429,17 @@ export const EditPropertyDialog = ({
     });
   };
 
+  // Remove selected new media
   const removeMedia = (index: number) => {
     setMediaFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // Remove existing media from storage and property record
   const removeExistingMedia = async (mediaUrl: string) => {
     try {
       const filePath = mediaUrl.split("/property-media/")[1];
       const { error } = await supabase.storage.from("property-media").remove([filePath]);
-
       if (error) throw error;
-
       setExistingMedia((prev) => prev.filter((url) => url !== mediaUrl));
       toast({
         title: "Success",
@@ -426,315 +455,347 @@ export const EditPropertyDialog = ({
     }
   };
 
-  // Function to handle adding a new housing complex from AddHousingComplex component
-  const handleAddComplex = (newComplex: HousingComplex) => {
-    setHousingComplexes((prev) => [...prev, newComplex]);
-    setUpdatedProperty((prev) => ({ ...prev, housing_complex_id: newComplex.id }));
-    setAddComplexOpen(false); // Close the AddHousingComplex dialog
-  };
-
-  // Add verification document handler
-  const handleVerificationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      setVerificationDocument(e.target.files[0]);
-    }
-  };
-
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-        <DialogContent className="sm:max-w-[800px] h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Property</DialogTitle>
-            <DialogDescription>Update the details of your property.</DialogDescription>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleEditProperty();
-            }}
-            className="space-y-6 p-6"
-          >
-            {/* Media Upload Section */}
-            <div className="space-y-4">
-              <Label>Property Media</Label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {existingMedia.map((url, index) => (
-                  <div key={index} className="relative group">
-                    <img
-                      src={url}
-                      alt={`Existing Media ${index}`}
-                      className="h-24 w-full object-cover rounded-lg border"
+      <Dialog
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+      >
+        {/* 
+          NOTE: We use fixed positioning and manual transforms to center the dialog 
+          in the viewport. Adjust max-w, max-h, and other classes to suit your design.
+        */}
+        <DialogContent
+          onMouseMove={handleMouseMove}
+          className="
+            fixed
+            top-1/2
+            left-1/2
+            w-full
+            max-w-[800px]
+            max-h-[90vh]
+            transform
+            -translate-x-1/2
+            -translate-y-1/2
+            overflow-y-auto
+            shadow-xl
+            rounded-lg
+            p-6
+            bg-gradient-to-b
+            from-transparent
+            via-background/50
+            to-background
+            border
+            border-slate-200
+            dark:border-slate-700
+            z-50
+          "
+        >
+          {/* The glow effect behind content */}
+          <div
+            className="pointer-events-none absolute inset-0 transition-opacity duration-300"
+            style={getGlowStyles()}
+          />
+          <div className="relative z-10">
+            <DialogHeader className="mb-6 text-center">
+              <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-950 via-blue-800 to-blue-600 dark:from-primary dark:to-blue-600 bg-clip-text text-transparent">
+                Edit Property
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Update the details of your property.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleEditProperty();
+              }}
+              className="space-y-6"
+            >
+              {/* Media Upload Section */}
+              <div className="space-y-4">
+                <Label>Property Media</Label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {/* Existing media */}
+                  {existingMedia.map((url, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={url}
+                        alt={`Existing Media ${index}`}
+                        className="h-24 w-full object-cover rounded-lg border"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeExistingMedia(url)}
+                        className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {/* New media */}
+                  {mediaFiles.map((file, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={file.preview}
+                        alt={`New Media ${index}`}
+                        className="h-24 w-full object-cover rounded-lg border"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeMedia(index)}
+                        className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {/* Media Upload Button */}
+                  <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg border-muted-foreground/25 hover:border-muted-foreground/50 cursor-pointer transition-colors">
+                    <div className="flex flex-col items-center justify-center">
+                      <Upload className="h-6 w-6 mb-2 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">Upload</span>
+                    </div>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*,video/*"
+                      multiple
+                      onChange={handleMediaChange}
                     />
-                    <button
-                      type="button"
-                      onClick={() => removeExistingMedia(url)}
-                      className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-                {mediaFiles.map((file, index) => (
-                  <div key={index} className="relative group">
-                    <img
-                      src={file.preview}
-                      alt={`New Media ${index}`}
-                      className="h-24 w-full object-cover rounded-lg border"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeMedia(index)}
-                      className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-                <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed rounded-lg border-muted-foreground/25 hover:border-muted-foreground/50 cursor-pointer transition-colors">
-                  <div className="flex flex-col items-center justify-center">
-                    <Upload className="h-6 w-6 mb-2 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">Upload</span>
-                  </div>
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="image/*,video/*"
-                    multiple
-                    onChange={handleMediaChange}
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Upload images or videos (max 10MB each)
+                </p>
+              </div>
+
+              {/* Basic Information Section */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Title</Label>
+                  <Input
+                    id="title"
+                    value={updatedProperty.title}
+                    onChange={(e) =>
+                      setUpdatedProperty({ ...updatedProperty, title: e.target.value })
+                    }
+                    required
+                    className="rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500"
                   />
-                </label>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Upload images or videos (max 10MB each)
-              </p>
-            </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    value={updatedProperty.description}
+                    onChange={(e) =>
+                      setUpdatedProperty({ ...updatedProperty, description: e.target.value })
+                    }
+                    className="min-h-[100px] rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
 
-            {/* Basic Information */}
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Title</Label>
-                <Input
-                  id="title"
-                  value={updatedProperty.title}
-                  onChange={(e) => setUpdatedProperty({ ...updatedProperty, title: e.target.value })}
-                  required
-                />
+                {/* Housing Complex Section */}
+                <div className="space-y-2">
+                  <Label htmlFor="housing_complex">Housing Complex</Label>
+                  <Select
+                    value={updatedProperty.housing_complex_id || ""}
+                    onValueChange={(value) => {
+                      if (value === "new") {
+                        setAddComplexOpen(true);
+                        setUpdatedProperty({
+                          ...updatedProperty,
+                          housing_complex_id: "",
+                        });
+                      } else {
+                        setUpdatedProperty({
+                          ...updatedProperty,
+                          housing_complex_id: value,
+                        });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="rounded-lg border-gray-300">
+                      <SelectValue placeholder="Select complex" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white dark:bg-slate-950 border border-gray-200 dark:border-slate-800">
+                      {housingComplexes.map((complex) => (
+                        <SelectItem key={complex.id} value={complex.id}>
+                          {complex.name}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="new">+ Add New Complex</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={updatedProperty.description}
-                  onChange={(e) => setUpdatedProperty({ ...updatedProperty, description: e.target.value })}
-                  className="min-h-[100px]"
-                  required
-                />
+              {/* Address Section */}
+              <AddressInput
+                address={updatedProperty.address}
+                unit={updatedProperty.unit}
+                city={updatedProperty.city}
+                state={updatedProperty.state}
+                zipCode={updatedProperty.zip_code}
+                onAddressChange={(val) =>
+                  setUpdatedProperty({ ...updatedProperty, address: val })
+                }
+                onUnitChange={(val) =>
+                  setUpdatedProperty({ ...updatedProperty, unit: val })
+                }
+                onCityChange={(val) =>
+                  setUpdatedProperty({ ...updatedProperty, city: val })
+                }
+                onStateChange={(val) =>
+                  setUpdatedProperty({ ...updatedProperty, state: val })
+                }
+                onZipCodeChange={(val) =>
+                  setUpdatedProperty({ ...updatedProperty, zip_code: val })
+                }
+              />
+
+              {/* Property Details Section */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="price">Price</Label>
+                  <Input
+                    id="price"
+                    type="number"
+                    value={updatedProperty.price}
+                    onChange={(e) =>
+                      setUpdatedProperty({ ...updatedProperty, price: e.target.value })
+                    }
+                    required
+                    className="rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="property_type">Property Type</Label>
+                  <select
+                    className="border rounded-lg p-2 w-full border-gray-300 focus:ring-2 focus:ring-blue-500"
+                    id="property_type"
+                    value={updatedProperty.property_type}
+                    onChange={(e) =>
+                      setUpdatedProperty({
+                        ...updatedProperty,
+                        property_type: e.target.value as
+                          | "house"
+                          | "apartment"
+                          | "condo"
+                          | "townhouse",
+                      })
+                    }
+                  >
+                    <option value="house">House</option>
+                    <option value="apartment">Apartment</option>
+                    <option value="condo">Condo</option>
+                    <option value="townhouse">Townhouse</option>
+                  </select>
+                </div>
               </div>
 
-              {/* Housing Complex Section */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bedrooms">Bedrooms</Label>
+                  <Input
+                    id="bedrooms"
+                    type="number"
+                    min="1"
+                    value={updatedProperty.bedrooms}
+                    onChange={(e) =>
+                      setUpdatedProperty({ ...updatedProperty, bedrooms: e.target.value })
+                    }
+                    required
+                    className="rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bathrooms">Bathrooms</Label>
+                  <Input
+                    id="bathrooms"
+                    type="number"
+                    min="1"
+                    step="0.5"
+                    value={updatedProperty.bathrooms}
+                    onChange={(e) =>
+                      setUpdatedProperty({ ...updatedProperty, bathrooms: e.target.value })
+                    }
+                    required
+                    className="rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="square_feet">Square Feet</Label>
+                  <Input
+                    id="square_feet"
+                    type="number"
+                    min="1"
+                    value={updatedProperty.square_feet}
+                    onChange={(e) =>
+                      setUpdatedProperty({ ...updatedProperty, square_feet: e.target.value })
+                    }
+                    required
+                    className="rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Verification Document Section */}
               <div className="space-y-2">
-                <Label htmlFor="housing_complex">Housing Complex</Label>
-                <Select
-                  value={updatedProperty.housing_complex_id || ""}
-                  onValueChange={(value) => {
-                    if (value === "new") {
-                      setAddComplexOpen(true);
-                      setUpdatedProperty({ ...updatedProperty, housing_complex_id: "" });
-                    } else {
-                      setUpdatedProperty({ ...updatedProperty, housing_complex_id: value });
+                <Label htmlFor="verification_document">
+                  Verification Document (Optional)
+                </Label>
+                <input
+                  type="file"
+                  id="verification_document"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) {
+                      setVerificationDocument(e.target.files[0]);
                     }
                   }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select complex" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border border-gray-200 dark:bg-slate-950 dark:border-slate-800">
-                    {housingComplexes.map((complex) => (
-                      <SelectItem key={complex.id} value={complex.id}>
-                        {complex.name}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="new">+ Add New Complex</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-                  <Label htmlFor="unit">Unit/Apt #</Label>
-                  <Input
-                    id="unit"
-                    value={updatedProperty.unit}
-                    onChange={(e) =>
-                      setUpdatedProperty((prev) => ({ ...prev, unit: e.target.value }))
-                    }
-                    placeholder="Enter unit or apartment number"
-                  />
-                </div>
-
-            {/* Address Information Section */}
-            <AddressInput
-              address={updatedProperty.address}
-              unit={updatedProperty.unit}
-              city={updatedProperty.city}
-              state={updatedProperty.state}
-              zipCode={updatedProperty.zip_code}
-              onAddressChange={(address) => setUpdatedProperty({ ...updatedProperty, address })}
-              onUnitChange={(unit) => setUpdatedProperty({ ...updatedProperty, unit })}
-              onCityChange={(city) => setUpdatedProperty({ ...updatedProperty, city })}
-              onStateChange={(state) => setUpdatedProperty({ ...updatedProperty, state })}
-              onZipCodeChange={(zip) => setUpdatedProperty({ ...updatedProperty, zip_code: zip })}
-            />
-
-            {/* Property Details */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="price">Price</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  value={updatedProperty.price}
-                  onChange={(e) => setUpdatedProperty({ ...updatedProperty, price: e.target.value })}
-                  required
+                  className="border rounded-lg p-2 w-full border-gray-300 focus:ring-2 focus:ring-blue-500"
                 />
+                {verificationDocument && (
+                  <div className="mt-2 flex items-center space-x-2">
+                    {verificationDocument.type === "application/pdf" ? (
+                      <ImageIcon className="h-6 w-6 text-red-500" />
+                    ) : (
+                      <img
+                        src={URL.createObjectURL(verificationDocument)}
+                        alt="Verification Preview"
+                        className="h-6 w-6 object-cover rounded-lg"
+                      />
+                    )}
+                    <span className="text-sm">{verificationDocument.name}</span>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Upload an image or PDF for property verification.
+                </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="property_type">Property Type</Label>
-                <select
-                  className="border rounded p-2 w-full"
-                  id="property_type"
-                  value={updatedProperty.property_type}
-                  onChange={(e) =>
-                    setUpdatedProperty({
-                      ...updatedProperty,
-                      property_type: e.target.value as "house" | "apartment" | "condo" | "townhouse",
-                    })
-                  }
-                >
-                  <option value="house">House</option>
-                  <option value="apartment">Apartment</option>
-                  <option value="condo">Condo</option>
-                  <option value="townhouse">Townhouse</option>
-                </select>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="bedrooms">Bedrooms</Label>
-                <Input
-                  id="bedrooms"
-                  type="number"
-                  min="1"
-                  value={updatedProperty.bedrooms}
-                  onChange={(e) => setUpdatedProperty({ ...updatedProperty, bedrooms: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bathrooms">Bathrooms</Label>
-                <Input
-                  id="bathrooms"
-                  type="number"
-                  min="1"
-                  step="0.5"
-                  value={updatedProperty.bathrooms}
-                  onChange={(e) => setUpdatedProperty({ ...updatedProperty, bathrooms: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="square_feet">Square Feet</Label>
-                <Input
-                  id="square_feet"
-                  type="number"
-                  min="1"
-                  value={updatedProperty.square_feet}
-                  onChange={(e) => setUpdatedProperty({ ...updatedProperty, square_feet: e.target.value })}
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Amenities Section */}
-            <div>
-              <Label>Amenities</Label>
-              <div className="grid grid-cols-2 gap-4 mt-2">
-                {/* Common Amenities */}
-                {Object.entries(updatedProperty).map(([key, value]) => {
-                  if (key.startsWith("has_")) {
-                    return (
-                      <div key={key} className="flex items-center">
-                        <Checkbox
-                          id={key}
-                          checked={Boolean(value)}
-                          onCheckedChange={(checked) =>
-                            setUpdatedProperty({ ...updatedProperty, [key]: checked })
-                          }
-                        />
-                        <Label htmlFor={key} className="ml-2">
-                          {key
-                            .split("_")
-                            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                            .join(" ")
-                            .replace(/^Has\s/, "")}
-                        </Label>
-                      </div>
-                    );
-                  }
-                  return null;
-                })}
-              </div>
-            </div>
-
-            {/* Add verification document input after other form fields */}
-            <div className="space-y-2">
-              <Label htmlFor="verification_document">
-                Verification Document (Optional)
-              </Label>
-              <input
-                type="file"
-                id="verification_document"
-                accept="image/*,application/pdf"
-                onChange={handleVerificationChange}
-                className="border rounded p-2 w-full"
-              />
-              {verificationDocument && (
-                <div className="mt-2 flex items-center space-x-2">
-                  {verificationDocument.type === "application/pdf" ? (
-                    <ImageIcon className="h-6 w-6 text-red-500" />
-                  ) : (
-                    <img
-                      src={URL.createObjectURL(verificationDocument)}
-                      alt="Verification Preview"
-                      className="h-6 w-6 object-cover"
-                    />
-                  )}
-                  <span>{verificationDocument.name}</span>
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Upload an image or PDF for property verification.
-              </p>
-            </div>
-
-            {/* Submit Button */}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Updating...
-                </>
-              ) : (
-                "Update Property"
-              )}
-            </Button>
-          </form>
+              {/* Submit Button */}
+              <Button type="submit" className="w-full mt-4" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  "Update Property"
+                )}
+              </Button>
+            </form>
+          </div>
         </DialogContent>
       </Dialog>
-      {/* AddHousingComplex Component */}
+
+      {/* AddHousingComplex modal */}
       <AddHousingComplex
         isOpen={addComplexOpen}
         onClose={() => setAddComplexOpen(false)}
@@ -742,4 +803,4 @@ export const EditPropertyDialog = ({
       />
     </>
   );
-}
+};

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import React, { useState } from "react";
+import { motion } from "framer-motion";
 import {
   Card,
   CardContent,
@@ -15,37 +16,60 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Building2, CheckCircle2, HomeIcon, MapPin } from "lucide-react";
 
 type PropertyType = "house" | "apartment" | "condo" | "townhouse";
 
 interface PropertyFiltersProps {
   onFiltersChange: (filters: {
+    title: string;
+    description: string;
     beds: string;
     baths: string;
     propertyType: PropertyType | "any";
     minSquareFeet: string;
     maxSquareFeet: string;
     priceRange: [number, number];
+    address: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    unit: string;
+    isVerified: boolean;
+    status: string;
     sublease_from: string;
     sublease_to: string;
+    originalLeaseRent: string;
+    originalLeaseTerm: string;
+    rentDifferential: string;
   }) => void;
 }
 
 export function PropertyFilters({ onFiltersChange }: PropertyFiltersProps) {
   const [filters, setFilters] = useState({
+    title: "",
+    description: "",
     beds: "any",
     baths: "any",
     propertyType: "any" as PropertyType | "any",
-    minSquareFeet: '',
-    maxSquareFeet: '',
+    minSquareFeet: "",
+    maxSquareFeet: "",
     priceRange: [0, 10000] as [number, number],
-    sublease_from: '',
-    sublease_to: '',
+    address: "",
+    city: "",
+    state: "",
+    zipCode: "",
+    unit: "",
+    isVerified: false,
+    status: "any",
+    sublease_from: "",
+    sublease_to: "",
+    originalLeaseRent: "",
+    originalLeaseTerm: "",
+    rentDifferential: "",
   });
-
-  const [isOpen, setIsOpen] = useState(false);
 
   const handleFilterChange = (key: keyof typeof filters, value: any) => {
     const newFilters = { ...filters, [key]: value };
@@ -53,39 +77,56 @@ export function PropertyFilters({ onFiltersChange }: PropertyFiltersProps) {
     onFiltersChange(newFilters);
   };
 
-  const handlePriceChange = (value: [number, number]) => {
-    handleFilterChange('priceRange', value);
-  };
-
   return (
-    <div className="pt-4 pb-4">
-      <Card>
-        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <CardHeader>
-            <CollapsibleTrigger asChild>
-              <button className="flex justify-between items-center w-full text-left text-lg font-semibold">
-                <span className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                      d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" 
-                    />
-                  </svg>
-                  Filter Properties
-                </span>
-                <ChevronDown className={`w-5 h-5 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-              </button>
-            </CollapsibleTrigger>
-          </CardHeader>
+    <motion.div 
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.8, ease: "easeOut" }}
+      className="w-full px-6 py-8 space-y-8 bg-gradient-to-r from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-lg shadow-lg"
+    >
+      <div className="text-center space-y-2">
+        <h2 className="text-4xl font-extrabold bg-gradient-to-r from-blue-500 to-indigo-600 bg-clip-text text-transparent">
+          Property Filters
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Fine-tune your property search with our advanced filters.
+        </p>
+      </div>
 
-          <CollapsibleContent>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                {/* Property Type */}
+      <Card className="border border-gray-200 dark:border-gray-700 backdrop-blur-md bg-white/80 dark:bg-gray-800/80 shadow-xl">
+        <CardContent className="p-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {/* Basic Information Section */}
+            <motion.div 
+              whileHover={{ scale: 1.02 }}
+              className="space-y-4"
+            >
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                <HomeIcon className="h-6 w-6" />
+                <h3 className="font-semibold text-lg">Basic Information</h3>
+              </div>
+              
+              <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Property Type</Label>
-                  <Select value={filters.propertyType} onValueChange={(value) => handleFilterChange('propertyType', value)}>
-                    <SelectTrigger><SelectValue placeholder="Any Type" /></SelectTrigger>
-                    <SelectContent className="bg-white border border-gray-200 dark:bg-slate-950 dark:border-slate-800">
+                  <Label className="text-sm font-medium">Property Title</Label>
+                  <Input
+                    placeholder="Search by title..."
+                    value={filters.title}
+                    onChange={(e) => handleFilterChange("title", e.target.value)}
+                    className="border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Property Type</Label>
+                  <Select
+                    value={filters.propertyType}
+                    onValueChange={(value) => handleFilterChange("propertyType", value)}
+                  >
+                    <SelectTrigger className="border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 transition-all">
+                      <SelectValue placeholder="Any Type" />
+                    </SelectTrigger>
+                    <SelectContent>
                       <SelectItem value="any">Any Type</SelectItem>
                       <SelectItem value="house">House</SelectItem>
                       <SelectItem value="apartment">Apartment</SelectItem>
@@ -94,88 +135,213 @@ export function PropertyFilters({ onFiltersChange }: PropertyFiltersProps) {
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* Bedrooms */}
-                <div className="space-y-2">
-                  <Label>Bedrooms</Label>
-                  <Select value={filters.beds} onValueChange={(value) => handleFilterChange('beds', value)}>
-                    <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
-                    <SelectContent className="bg-white border border-gray-200 dark:bg-slate-950 dark:border-slate-800">
-                      <SelectItem value="any">Any</SelectItem>
-                      <SelectItem value="1">1+ Beds</SelectItem>
-                      <SelectItem value="2">2+ Beds</SelectItem>
-                      <SelectItem value="3">3+ Beds</SelectItem>
-                      <SelectItem value="4">4+ Beds</SelectItem>
-                      <SelectItem value="5">5+ Beds</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Bathrooms */}
-                <div className="space-y-2">
-                  <Label>Bathrooms</Label>
-                  <Select value={filters.baths} onValueChange={(value) => handleFilterChange('baths', value)}>
-                    <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
-                    <SelectContent className="bg-white border border-gray-200 dark:bg-slate-950 dark:border-slate-800">
-                      <SelectItem value="any">Any</SelectItem>
-                      <SelectItem value="1">1+ Baths</SelectItem>
-                      <SelectItem value="2">2+ Baths</SelectItem>
-                      <SelectItem value="3">3+ Baths</SelectItem>
-                      <SelectItem value="4">4+ Baths</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {/* Square Feet Range */}
-            <div className="space-y-2">
-              <Label>Square Feet</Label>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="Min"
-                  value={filters.minSquareFeet}
-                  onChange={(e) => handleFilterChange('minSquareFeet', e.target.value)}
-                  className="w-full"
-                />
-                <Input
-                  type="number"
-                  placeholder="Max"
-                  value={filters.maxSquareFeet}
-                  onChange={(e) => handleFilterChange('maxSquareFeet', e.target.value)}
-                  className="w-full"
-                />
               </div>
-            </div>
-          
+            </motion.div>
 
-                {/* Sublease Date Range */}
-                <div className="space-y-2">
-                  <Label>Sublease From</Label>
-                  <Input type="date" value={filters.sublease_from} onChange={(e) => handleFilterChange('sublease_from', e.target.value)} />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Sublease To</Label>
-                  <Input type="date" value={filters.sublease_to} onChange={(e) => handleFilterChange('sublease_to', e.target.value)} />
-                </div>
+            {/* Location Section */}
+            <motion.div 
+              whileHover={{ scale: 1.02 }}
+              className="space-y-4"
+            >
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                <MapPin className="h-6 w-6" />
+                <h3 className="font-semibold text-lg">Location</h3>
               </div>
-
-              {/* Price Range */}
+              
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <Label>Price Range</Label>
-                  <span className="text-sm text-muted-foreground">
-                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-                      .format(filters.priceRange[0])} - {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-                      .format(filters.priceRange[1])}
-                  </span>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Address</Label>
+                  <Input
+                    placeholder="Enter address..."
+                    value={filters.address}
+                    onChange={(e) => handleFilterChange("address", e.target.value)}
+                    className="border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 transition-all"
+                  />
                 </div>
-                
-                <Slider min={0} max={10000} step={100} value={filters.priceRange} onValueChange={handlePriceChange} className="w-full" />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">City</Label>
+                    <Input
+                      placeholder="City..."
+                      value={filters.city}
+                      onChange={(e) => handleFilterChange("city", e.target.value)}
+                      className="border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">State</Label>
+                    <Input
+                      placeholder="State..."
+                      value={filters.state}
+                      onChange={(e) => handleFilterChange("state", e.target.value)}
+                      className="border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 transition-all"
+                    />
+                  </div>
+                </div>
               </div>
-            </CardContent>
-          </CollapsibleContent>
-        </Collapsible>
+            </motion.div>
+
+            {/* Property Details Section */}
+            <motion.div 
+              whileHover={{ scale: 1.02 }}
+              className="space-y-4"
+            >
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                <Building2 className="h-6 w-6" />
+                <h3 className="font-semibold text-lg">Property Details</h3>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Bedrooms</Label>
+                    <Select
+                      value={filters.beds}
+                      onValueChange={(value) => handleFilterChange("beds", value)}
+                    >
+                      <SelectTrigger className="border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 transition-all">
+                        <SelectValue placeholder="Any" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="any">Any</SelectItem>
+                        {[1, 2, 3, 4, 5].map((num) => (
+                          <SelectItem key={num} value={num.toString()}>
+                            {num}+ Beds
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Bathrooms</Label>
+                    <Select
+                      value={filters.baths}
+                      onValueChange={(value) => handleFilterChange("baths", value)}
+                    >
+                      <SelectTrigger className="border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 transition-all">
+                        <SelectValue placeholder="Any" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="any">Any</SelectItem>
+                        {[1, 2, 3, 4].map((num) => (
+                          <SelectItem key={num} value={num.toString()}>
+                            {num}+ Baths
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Square Feet Range</Label>
+                  <div className="flex gap-4">
+                    <Input
+                      type="number"
+                      placeholder="Min"
+                      value={filters.minSquareFeet}
+                      onChange={(e) =>
+                        handleFilterChange("minSquareFeet", e.target.value)
+                      }
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 transition-all"
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Max"
+                      value={filters.maxSquareFeet}
+                      onChange={(e) =>
+                        handleFilterChange("maxSquareFeet", e.target.value)
+                      }
+                      className="w-full border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 transition-all"
+                    />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Additional Filters */}
+            <motion.div 
+              whileHover={{ scale: 1.02 }}
+              className="space-y-4"
+            >
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                <CheckCircle2 className="h-6 w-6" />
+                <h3 className="font-semibold text-lg">Additional Filters</h3>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">
+                    Verified Properties Only
+                  </Label>
+                  <Switch
+                    checked={filters.isVerified}
+                    onCheckedChange={(checked) =>
+                      handleFilterChange("isVerified", checked)
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Status</Label>
+                  <Select
+                    value={filters.status}
+                    onValueChange={(value) => handleFilterChange("status", value)}
+                  >
+                    <SelectTrigger className="border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 transition-all">
+                      <SelectValue placeholder="Any Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any Status</SelectItem>
+                      <SelectItem value="available">Available</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="sold">Sold</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Price Range Section - Full Width */}
+            <motion.div 
+              whileHover={{ scale: 1.02 }}
+              className="col-span-full space-y-4"
+            >
+              <Label className="text-sm font-medium">Price Range</Label>
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <Badge variant="secondary" className="text-lg font-semibold">
+                    {new Intl.NumberFormat("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                      maximumFractionDigits: 0,
+                    }).format(filters.priceRange[0])}
+                  </Badge>
+                  <Badge variant="secondary" className="text-lg font-semibold">
+                    {new Intl.NumberFormat("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                      maximumFractionDigits: 0,
+                    }).format(filters.priceRange[1])}
+                  </Badge>
+                </div>
+                <Slider
+                  min={0}
+                  max={10000}
+                  step={100}
+                  value={filters.priceRange}
+                  onValueChange={(value) =>
+                    handleFilterChange("priceRange", value)
+                  }
+                  className="w-full"
+                />
+              </div>
+            </motion.div>
+          </div>
+        </CardContent>
       </Card>
-    </div>
+    </motion.div>
   );
 }
