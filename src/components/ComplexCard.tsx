@@ -85,7 +85,9 @@ const StarRating = ({ rating }: { rating: number }) => {
           key={`empty-${i}`}
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          transition={{ delay: (fullStars + (hasHalfStar ? 1 : 0) + i) * 0.1 }}
+          transition={{
+            delay: (fullStars + (hasHalfStar ? 1 : 0) + i) * 0.1,
+          }}
         >
           <Star className="h-4 w-4 text-gray-300" />
         </motion.div>
@@ -174,7 +176,52 @@ const ReviewInput = ({
 
 // ---------------- ReviewCard component ----------------
 const ReviewCard = ({ review }: { review: any }) => {
-  const [isLiked, setIsLiked] = useState(false);
+  const [helpfulCount, setHelpfulCount] = useState<number>(review.helpful || 0);
+  const [hasClicked, setHasClicked] = useState(false);
+
+  // Fetch the latest helpful count when the component mounts
+  useEffect(() => {
+    async function fetchLatestCount() {
+      const { data, error } = await supabase
+        .from("housing_complex_reviews")
+        .select("helpful")
+        .eq("id", review.id)
+        .single();
+      if (!error && data) {
+        setHelpfulCount(data.helpful || 0);
+      }
+    }
+    fetchLatestCount();
+  }, [review.id]);
+
+  const handleHelpfulClick = async () => {
+    if (hasClicked) return;
+
+    setHasClicked(true);
+
+    // Call the RPC function to increment the helpful count atomically
+    const { error } = await supabase.rpc("increment_helpful", {
+      review_id: review.id,
+    });
+
+    if (error) {
+      console.error("Error incrementing helpful:", error);
+      setHasClicked(false);
+    } else {
+      // Fetch the updated count from the database
+      const { data, error: fetchError } = await supabase
+        .from("housing_complex_reviews")
+        .select("helpful")
+        .eq("id", review.id)
+        .single();
+
+      if (fetchError) {
+        console.error("Error fetching updated helpful count:", fetchError);
+      } else {
+        setHelpfulCount(data.helpful || 0);
+      }
+    }
+  };
 
   return (
     <motion.div
@@ -208,15 +255,16 @@ const ReviewCard = ({ review }: { review: any }) => {
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
-              onClick={() => setIsLiked(!isLiked)}
+              onClick={handleHelpfulClick}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
             >
               <ThumbsUp
                 className={`h-4 w-4 ${
-                  isLiked ? "fill-primary text-primary" : ""
+                  hasClicked ? "fill-primary text-primary" : ""
                 }`}
               />
-              Helpful
+              <span>Helpful</span>
+              <span className="text-xs font-medium">({helpfulCount})</span>
             </motion.button>
             <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors">
               <MessageSquare className="h-4 w-4" />
@@ -303,7 +351,6 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
     }
   };
 
-  // Fetch properties on mount
   useEffect(() => {
     if (complex.id) {
       fetchProperties();
@@ -320,7 +367,6 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
       >
         <Card className="group overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-blue-600/10 dark:hover:shadow-primary/10 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm border-blue-100/50 dark:border-blue-900/50 w-full">
           <CardContent className="p-0">
-            {/* Image Gallery on card */}
             <div className="relative overflow-hidden h-48 md:h-60 lg:h-64">
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent z-10" />
               <ImageGallery
@@ -343,16 +389,7 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
                 </div>
               </div>
             </div>
-
-            {/* Card Content */}
             <div className="p-4 md:p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <StarRating rating={complex.average_rating} />
-                <Badge variant="outline" className="font-medium capitalize">
-                  {complex.property_type || "N/A"}
-                </Badge>
-              </div>
-
               <div className="grid grid-cols-3 gap-2 md:gap-4 pt-2">
                 <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-primary/5">
                   <Building className="h-4 w-4 text-primary" />
@@ -373,9 +410,8 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
                   </span>
                 </div>
               </div>
-
               <Button
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 dark:from-blue-500 dark:to-blue-700 group"
+                className="w-full bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 group"
                 onClick={() => setIsOpen(true)}
               >
                 View Details
@@ -386,14 +422,12 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
         </Card>
       </motion.div>
 
-      {/* Main Details Dialog */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0">
           <DialogHeader className="px-6 py-2">
             <DialogTitle>{complex.name}</DialogTitle>
             <DialogDescription>{complex.address}</DialogDescription>
           </DialogHeader>
-
           <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
             <TabsList className="flex w-full justify-center gap-2 md:gap-4 mt-4 bg-transparent border-none">
               <TabsTrigger
@@ -415,9 +449,7 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
                 Reviews
               </TabsTrigger>
             </TabsList>
-
             <div className="p-6">
-              {/* Overview Tab */}
               <TabsContent value="overview" className="mt-0 space-y-6">
                 {complex.housing_complex_photos?.length > 0 && (
                   <section>
@@ -445,8 +477,6 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
                         {complex.description || "No description available."}
                       </p>
                     </div>
-
-                    {/* Amenities Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4">
                       {Object.entries(complex)
                         .filter(
@@ -472,8 +502,6 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
                         ))}
                     </div>
                   </section>
-
-                  {/* Stats Section */}
                   <section className="grid grid-cols-3 gap-6">
                     <Card className="bg-primary/5 border-none">
                       <CardHeader className="p-4">
@@ -502,8 +530,6 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
                   </section>
                 </motion.div>
               </TabsContent>
-
-              {/* Properties Tab */}
               <TabsContent value="properties" className="mt-0">
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -548,7 +574,9 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => navigate(`/properties/${property.id}`)}
+                                onClick={() =>
+                                  navigate(`/properties/${property.id}`)
+                                }
                                 className="hover:bg-primary/10"
                               >
                                 View Details
@@ -568,8 +596,6 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
                   )}
                 </motion.div>
               </TabsContent>
-
-              {/* Reviews Tab */}
               <TabsContent value="reviews" className="mt-0 space-y-6">
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -586,7 +612,6 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
                         Based on {complex.reviews.length} reviews
                       </p>
                     </div>
-
                     {userRole === "buyer" && (
                       <Button
                         onClick={() => setIsReviewDialogOpen(true)}
@@ -596,7 +621,6 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
                       </Button>
                     )}
                   </div>
-
                   <div className="space-y-4">
                     <AnimatePresence>
                       {complex.reviews.map((review: any) => (
@@ -611,7 +635,6 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Full-width Review Submission Dialog */}
       <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
         <DialogContent className="max-w-4xl w-full p-6">
           <DialogHeader>

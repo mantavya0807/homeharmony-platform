@@ -22,12 +22,16 @@ interface Review {
 export function BuyerReviews() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchReviews = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) {
+          // Optionally navigate to login or another route
+          return;
+        }
 
         // Fetch reviews written by this buyer
         const { data, error } = await supabase
@@ -52,18 +56,17 @@ export function BuyerReviews() {
     fetchReviews();
   }, []);
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
-  if (!reviews.length) {
-    return <div>You haven't written any reviews yet.</div>;
-  }
+  if (loading) return <div className="pt-20 text-center">Loading...</div>;
+  if (!reviews.length)
+    return <div className="pt-20 text-center">You haven't written any reviews yet.</div>;
 
   return (
-    <div className="space-y-4">
+    <div className="pt-20 space-y-4 container mx-auto px-4">
       {reviews.map((review) => (
         <Card key={review.id}>
+          <CardHeader>
+            <CardTitle>{review.reviewer?.full_name}</CardTitle>
+          </CardHeader>
           <CardContent className="p-6">
             <div className="flex items-center gap-4 mb-4">
               <Avatar>
@@ -76,7 +79,9 @@ export function BuyerReviews() {
                   {[...Array(5)].map((_, i) => (
                     <Star
                       key={i}
-                      className={i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}
+                      className={
+                        i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
+                      }
                       size={16}
                     />
                   ))}
@@ -105,12 +110,16 @@ export function SellerReviews() {
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState<string>('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchReviews = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) {
+          // Optionally navigate to login or another route
+          return;
+        }
 
         const { data, error } = await supabase
           .from('seller_reviews')
@@ -143,9 +152,12 @@ export function SellerReviews() {
 
       if (error) throw error;
 
-      setReviews(reviews.map(review => 
-        review.id === reviewId ? { ...review, reply: replyText } : review
-      ));
+      // Update state to show the new reply
+      setReviews(
+        reviews.map(review =>
+          review.id === reviewId ? { ...review, reply: replyText } : review
+        )
+      );
       setReplyText('');
       setReplyingTo(null);
     } catch (error) {
@@ -153,16 +165,16 @@ export function SellerReviews() {
     }
   };
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
+  if (loading) return <div className="pt-20 text-center">Loading...</div>;
 
   return (
-    <div className="space-y-4">
+    <div className="pt-20 space-y-4 container mx-auto px-4">
       {reviews.map((review) => (
         <Card key={review.id}>
+          <CardHeader>
+            <CardTitle>{review.reviewer?.full_name}</CardTitle>
+          </CardHeader>
           <CardContent className="p-6">
-            {/* Review content */}
             <div className="flex items-center gap-4 mb-4">
               <Avatar>
                 <AvatarImage src={review.reviewer?.avatar_url} />
@@ -174,21 +186,17 @@ export function SellerReviews() {
                   {[...Array(5)].map((_, i) => (
                     <Star
                       key={i}
-                      className={i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}
+                      className={
+                        i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
+                      }
                       size={16}
                     />
                   ))}
                 </div>
               </div>
-              {!review.reply && (
-                <Badge variant="destructive" className="ml-auto">
-                  New
-                </Badge>
-              )}
+              {!review.reply && <Badge variant="destructive" className="ml-auto">New</Badge>}
             </div>
             <p className="text-sm mb-4">{review.review_text}</p>
-
-            {/* Reply section */}
             {review.reply ? (
               <div className="bg-muted/50 p-4 rounded-lg mt-4">
                 <div className="font-medium mb-2">Your Reply:</div>

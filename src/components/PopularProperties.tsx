@@ -3,6 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PropertyCard } from "@/components/PropertyCard";
 import { TrendingUp } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface PopularPropertiesProps {
   properties: any[];
@@ -37,19 +38,44 @@ export function PopularProperties({ properties, searchLocation }: PopularPropert
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {popularProperties.map((property) => (
-            <PropertyCard
+            <motion.div
               key={property.id}
-              id={property.id}
-              title={property.title}
-              price={property.price}
-              location={`${property.city}, ${property.state}`}
-              imageUrl={property.images?.[0]}
-              beds={property.bedrooms}
-              baths={property.bathrooms}
-              sqft={property.square_feet}
-              {...property}
-              roomTag="Popular"
-            />
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
+              className="border-2 border-yellow-400 rounded-lg"
+              transition={{ duration: 0.3 }}
+            >
+              {/* Passing all property details to the PropertyCard */}
+              <PropertyCard
+                id={property.id}
+                title={property.title}
+                description={property.description}
+                price={property.price}
+                property_type={property.property_type}
+                bedrooms={property.bedrooms}
+                bathrooms={property.bathrooms}
+                square_feet={property.square_feet}
+                address={property.address}
+                city={property.city}
+                state={property.state}
+                zip_code={property.zip_code}
+                images={property.images}
+                sublease_from={property.sublease_from}
+                sublease_to={property.sublease_to}
+                is_verified={property.is_verified}
+                verification_document_url={property.verification_document_url}
+                isSaved={property.isSaved}
+                sellerId={property.sellerId}
+                sellerName={property.sellerName}
+                sellerAvatarUrl={property.sellerAvatarUrl}
+                sellerRating={property.sellerRating}
+                click_count={property.click_count}
+                onSaveToggle={property.onSaveToggle}
+                // Spread any extra properties
+                {...property}
+              />
+            </motion.div>
           ))}
         </div>
       </CardContent>

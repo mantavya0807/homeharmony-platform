@@ -126,7 +126,7 @@ export default function Hero() {
               className="group relative overflow-hidden bg-gradient-to-r from-blue-950 to-blue-800 dark:from-primary dark:to-blue-600 px-8 py-6 transition-all hover:shadow-lg hover:shadow-blue-600/20 dark:hover:shadow-primary/20"
               onMouseEnter={() => setIsHovered(true)}
               onMouseLeave={() => setIsHovered(false)}
-              onClick={() => navigate("/auth?view=login")}
+              onClick={() => navigate("/login")}
             >
               <span className="relative z-10 text-white font-medium">Get Started</span>
               <motion.div
@@ -143,7 +143,7 @@ export default function Hero() {
               size="lg"
               variant="outline"
               className="px-8 py-6 bg-white/50 dark:bg-transparent border-blue-900/20 dark:border-white/20 hover:border-blue-800 hover:bg-blue-50 dark:hover:border-primary dark:hover:bg-primary/10 text-blue-900 hover:text-blue-900 dark:text-white dark:hover:text-white backdrop-blur-sm"
-              onClick={() => navigate("/auth?view=role")}
+              onClick={() => navigate("/register")}
             >
               List Your Property
             </Button>

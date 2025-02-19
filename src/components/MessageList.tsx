@@ -1,24 +1,80 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, Check, CheckCheck } from 'lucide-react';
-import { format } from 'date-fns';
+import { Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { motion } from "framer-motion";
 
-export function MessageList({ chatId }) {
+const Message = ({ message, isCurrentUser }) => {
+  const formatTime = (timestamp) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0 }}
+      className={cn(
+        "flex items-start gap-2 mb-4",
+        isCurrentUser && "flex-row-reverse"
+      )}
+    >
+      <Avatar className="h-8 w-8 mt-0.5 border-2 border-primary/10">
+        <AvatarImage src={message.sender?.avatar_url} />
+        <AvatarFallback className="bg-primary/5 text-primary">
+          {message.sender?.full_name?.[0] || '?'}
+        </AvatarFallback>
+      </Avatar>
+      
+      <div className={cn(
+        "flex flex-col max-w-[80%]",
+        isCurrentUser && "items-end"
+      )}>
+        <div className="flex items-baseline gap-2">
+          <span className="text-sm font-medium text-blue-900 dark:text-white">
+            {message.sender?.full_name}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {formatTime(message.created_at)}
+          </span>
+        </div>
+        
+        <div className="flex items-end gap-2">
+          <div className={cn(
+            "mt-1 rounded-2xl px-4 py-2",
+            isCurrentUser 
+              ? "bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-500 dark:to-blue-600 text-white"
+              : "bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-white"
+          )}>
+            {message.content}
+          </div>
+          
+          {isCurrentUser && (
+            <div className={cn(
+              "flex items-center transition-opacity",
+              "text-blue-500 dark:text-blue-400",
+              message.read ? "opacity-100" : "opacity-70"
+            )}>
+              <Check className="h-4 w-4" />
+              {message.read && <Check className="h-4 w-4 -ml-2" />}
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+export function MessageList({ chatId, currentUserId }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
-        setCurrentUser(user);
-
-        // Get messages for this chat
-        const { data: messagesData, error } = await supabase
+        const { data: messagesData } = await supabase
           .from('messages')
           .select(`
             *,
@@ -27,23 +83,19 @@ export function MessageList({ chatId }) {
           .eq('chat_id', chatId)
           .order('created_at', { ascending: true });
 
-        if (error) throw error;
+        setMessages(messagesData || []);
 
         // Mark unread messages as read
-        const unreadMessages = messagesData.filter(
-          msg => !msg.read && msg.sender_id !== user.id
-        );
+        const unreadMessages = messagesData?.filter(
+          msg => !msg.read && msg.sender_id !== currentUserId
+        ) || [];
 
         if (unreadMessages.length > 0) {
-          const { error: updateError } = await supabase
+          await supabase
             .from('messages')
             .update({ read: true })
             .in('id', unreadMessages.map(msg => msg.id));
-
-          if (updateError) console.error('Error marking messages as read:', updateError);
         }
-
-        setMessages(messagesData);
       } catch (error) {
         console.error('Error fetching messages:', error);
       } finally {
@@ -52,112 +104,43 @@ export function MessageList({ chatId }) {
     };
 
     fetchMessages();
-  }, [chatId]);
 
-  useEffect(() => {
-    // Subscribe to new messages and read status updates
-    const channel = supabase
+    const subscription = supabase
       .channel(`messages:${chatId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'messages',
-        filter: `chat_id=eq.${chatId}`,
-      }, async (payload) => {
-        if (payload.eventType === 'INSERT') {
-          // Fetch the sender information for the new message
-          const { data: sender } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', payload.new.sender_id)
-            .single();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' },
+        async (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const { data: sender } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', payload.new.sender_id)
+              .single();
 
-          const newMessage = {
-            ...payload.new,
-            sender,
-          };
+            setMessages(prev => [...prev, { ...payload.new, sender }]);
 
-          // If the message is not from current user, mark it as read
-          if (payload.new.sender_id !== currentUser?.id) {
-            const { error: updateError } = await supabase
-              .from('messages')
-              .update({ read: true })
-              .eq('id', payload.new.id);
-
-            if (updateError) console.error('Error marking message as read:', updateError);
+            // Mark message as read if we're the receiver
+            if (payload.new.sender_id !== currentUserId) {
+              await supabase
+                .from('messages')
+                .update({ read: true })
+                .eq('id', payload.new.id);
+            }
+          } else if (payload.eventType === 'DELETE') {
+            setMessages(prev => prev.filter(msg => msg.id !== payload.old.id));
+          } else if (payload.eventType === 'UPDATE') {
+            setMessages(prev => 
+              prev.map(msg => 
+                msg.id === payload.new.id ? { ...msg, ...payload.new } : msg
+              )
+            );
           }
-
-          setMessages(prev => [...prev, newMessage]);
-        } else if (payload.eventType === 'UPDATE') {
-          // Update read status
-          setMessages(prev => prev.map(msg => 
-            msg.id === payload.new.id ? { ...msg, read: payload.new.read } : msg
-          ));
-        }
-      })
+        })
       .subscribe();
 
     return () => {
-      channel.unsubscribe();
+      subscription.unsubscribe();
     };
-  }, [chatId, currentUser?.id]);
-
-  const formatMessageTime = (timestamp) => {
-    return format(new Date(timestamp), 'HH:mm');
-  };
-
-  const MessageComponent = ({ message, isCurrentUser }) => (
-    <div
-      className={cn(
-        "flex items-start gap-2 mb-4",
-        isCurrentUser && "flex-row-reverse"
-      )}
-    >
-      <Avatar className="h-8 w-8 mt-0.5">
-        <AvatarImage src={message.sender?.avatar_url} />
-        <AvatarFallback>
-          {message.sender?.full_name?.[0] || '?'}
-        </AvatarFallback>
-      </Avatar>
-      <div
-        className={cn(
-          "flex flex-col max-w-[80%]",
-          isCurrentUser && "items-end"
-        )}
-      >
-        <div className="flex items-baseline gap-2">
-          <span className="text-sm font-medium">
-            {message.sender?.full_name}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {formatMessageTime(message.created_at)}
-          </span>
-        </div>
-        <div className="flex items-end gap-1">
-          <div
-            className={cn(
-              "mt-1 rounded-2xl px-4 py-2",
-              isCurrentUser
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted",
-              "flex items-center justify-center text-center" // Added these classes for center alignment
-            )}
-          >
-            {message.content}
-          </div>
-          {isCurrentUser && (
-            <span className="text-xs text-muted-foreground">
-              {message.read ? (
-                <CheckCheck className="h-4 w-4" />
-              ) : (
-                <Check className="h-4 w-4" />
-              )}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  }, [chatId, currentUserId]);
 
   if (loading) {
     return (
@@ -168,12 +151,12 @@ export function MessageList({ chatId }) {
   }
 
   return (
-    <div className="flex flex-col space-y-4">
-      {messages.map(message => (
-        <MessageComponent
+    <div className="space-y-4">
+      {messages.map((message) => (
+        <Message
           key={message.id}
           message={message}
-          isCurrentUser={message.sender_id === currentUser?.id}
+          isCurrentUser={message.sender_id === currentUserId}
         />
       ))}
     </div>

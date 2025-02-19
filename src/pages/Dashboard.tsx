@@ -1,8 +1,6 @@
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PropertyList } from "@/components/PropertyList";
-import { PopularProperties } from "@/components/PopularProperties";
-import { PropertyFilters } from "@/components/PropertyFilter";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,38 +19,72 @@ import { useTheme } from "next-themes";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import PopularPropertyCard from "@/components/PopularPropertyCard";
+import { PropertyFilters as PropertyFiltersComponent } from "@/components/PropertyFilter";
 
-const GEMINI_API_KEY = "AIzaSyCEC-hIBfbVTGWS0SdrkXrKU20ZqY-srIo";
-const DEFAULT_CENTER = { lat: 40.7934, lng: -77.86 };
-
-// Sanity check for your Google Generative AI key (replace with your environment variable in production)
+const GEMINI_API_KEY = "AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I";
 if (!GEMINI_API_KEY) {
-  throw new Error("Gemini API key is not configured in environment variables");
+  throw new Error("Gemini API key is not configured");
 }
-
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+const DEFAULT_CENTER = { lat: 40.7934, lng: -77.86 };
 
 interface Property {
   id: string;
+  seller_id: string;
   title: string;
+  description?: string;
   price: number;
-  address: string;
-  city: string;
-  state: string;
+  property_type: string;
   bedrooms: number;
   bathrooms: number;
   square_feet: number;
+  address: string;
+  city: string;
+  state: string;
+  zip_code?: string;
   images: string[];
-  property_type: string;
+  is_verified?: boolean;
+  verification_document_url?: string;
+  status: string;
+  unit?: string;
   saved_properties?: { id: string }[];
   isSaved?: boolean;
   click_count?: number;
 }
+
+interface AICriteria {
+  bedrooms: number | null;
+  bathrooms: number | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+  propertyType: "house" | "apartment" | "condo" | "townhouse" | null;
+  location: { city: string; state: string } | null;
+  squareFeet: number | null;
+}
+
+const defaultUIFilters = {
+  searchText: "",
+  propertyType: "any" as "any" | "house" | "apartment" | "condo" | "townhouse",
+  beds: "any",
+  baths: "any",
+  minSquareFeet: "",
+  maxSquareFeet: "",
+  priceRange: [0, 10000] as [number, number],
+  address: "",
+  city: "",
+  state: "",
+  zipCode: "",
+  radius: 5,
+  isVerified: false,
+};
 
 export default function Dashboard() {
   const { toast } = useToast();
@@ -64,22 +96,180 @@ export default function Dashboard() {
 
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [aiCriteria, setAICriteria] = useState<AICriteria | null>(null);
 
-  // For the radial glow effect on the search header
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [uiFilters, setUIFilters] = useState(defaultUIFilters);
+
   const searchRef = useRef<HTMLDivElement>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isHovered, setIsHovered] = useState(false);
 
-  // For the filters modal
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  const [housingComplexes, setHousingComplexes] = useState<
+    { id: string; name: string }[]
+  >([]);
 
   useEffect(() => {
     fetchProperties();
   }, []);
 
   useEffect(() => {
-    // Mouse tracking for radial glow
+    const fetchHousingComplexes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("housing_complexes")
+          .select("id, name")
+          .order("name");
+        if (error) throw error;
+        setHousingComplexes(data || []);
+      } catch (error) {
+        console.error("Error fetching housing complexes:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load housing complexes",
+          variant: "destructive",
+        });
+      }
+    };
+    fetchHousingComplexes();
+  }, []);
+
+  useEffect(() => {
+    const filtered = properties.filter((property) => {
+      if (aiCriteria) {
+        if (aiCriteria.bedrooms && property.bedrooms < aiCriteria.bedrooms) {
+          return false;
+        }
+        if (aiCriteria.bathrooms && property.bathrooms < aiCriteria.bathrooms) {
+          return false;
+        }
+        if (aiCriteria.minPrice && property.price < aiCriteria.minPrice) {
+          return false;
+        }
+        if (aiCriteria.maxPrice && property.price > aiCriteria.maxPrice) {
+          return false;
+        }
+        if (
+          aiCriteria.propertyType &&
+          property.property_type.toLowerCase() !==
+            aiCriteria.propertyType.toLowerCase()
+        ) {
+          return false;
+        }
+        if (aiCriteria.location) {
+          if (
+            aiCriteria.location.city &&
+            !property.city
+              .toLowerCase()
+              .includes(aiCriteria.location.city.toLowerCase())
+          ) {
+            return false;
+          }
+          if (
+            aiCriteria.location.state &&
+            !property.state
+              .toLowerCase()
+              .includes(aiCriteria.location.state.toLowerCase())
+          ) {
+            return false;
+          }
+        }
+        if (aiCriteria.squareFeet && property.square_feet < aiCriteria.squareFeet) {
+          return false;
+        }
+      }
+
+      if (uiFilters.searchText) {
+        const searchLower = uiFilters.searchText.toLowerCase();
+        const titleMatch = property.title.toLowerCase().includes(searchLower);
+        const cityMatch = property.city.toLowerCase().includes(searchLower);
+        const stateMatch = property.state.toLowerCase().includes(searchLower);
+        const zipMatch =
+          property.zip_code && property.zip_code.toLowerCase().includes(searchLower);
+        if (!titleMatch && !cityMatch && !stateMatch && !zipMatch) {
+          return false;
+        }
+      }
+      if (
+        uiFilters.propertyType !== "any" &&
+        property.property_type.toLowerCase() !== uiFilters.propertyType.toLowerCase()
+      ) {
+        return false;
+      }
+      if (uiFilters.beds !== "any") {
+        const bedsNum = parseInt(uiFilters.beds);
+        if (property.bedrooms < bedsNum) {
+          return false;
+        }
+      }
+      if (uiFilters.baths !== "any") {
+        const bathsNum = parseFloat(uiFilters.baths);
+        if (property.bathrooms < bathsNum) {
+          return false;
+        }
+      }
+      if (uiFilters.minSquareFeet) {
+        const minSqFt = Number(uiFilters.minSquareFeet);
+        if (property.square_feet < minSqFt) {
+          return false;
+        }
+      }
+      if (uiFilters.maxSquareFeet) {
+        const maxSqFt = Number(uiFilters.maxSquareFeet);
+        if (property.square_feet > maxSqFt) {
+          return false;
+        }
+      }
+      if (
+        property.price < uiFilters.priceRange[0] ||
+        property.price > uiFilters.priceRange[1]
+      ) {
+        return false;
+      }
+      if (
+        uiFilters.address &&
+        !property.address.toLowerCase().includes(uiFilters.address.toLowerCase())
+      ) {
+        return false;
+      }
+      if (
+        uiFilters.city &&
+        !property.city.toLowerCase().includes(uiFilters.city.toLowerCase())
+      ) {
+        return false;
+      }
+      if (
+        uiFilters.state &&
+        !property.state.toLowerCase().includes(uiFilters.state.toLowerCase())
+      ) {
+        return false;
+      }
+      if (
+        uiFilters.zipCode &&
+        property.zip_code &&
+        !property.zip_code.toLowerCase().includes(uiFilters.zipCode.toLowerCase())
+      ) {
+        return false;
+      }
+      if (uiFilters.radius && uiFilters.address) {
+        const locText = uiFilters.address.toLowerCase();
+        const addressHasText = property.address.toLowerCase().includes(locText);
+        const cityHasText = property.city.toLowerCase().includes(locText);
+        if (!addressHasText && !cityHasText) {
+          return false;
+        }
+      }
+      if (uiFilters.isVerified && !property.is_verified) {
+        return false;
+      }
+      return true;
+    });
+    setFilteredProperties(filtered);
+  }, [properties, aiCriteria, uiFilters]);
+
+  useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (searchRef.current) {
         const rect = searchRef.current.getBoundingClientRect();
@@ -89,7 +279,6 @@ export default function Dashboard() {
         });
       }
     };
-
     window.addEventListener("mousemove", handleMouseMove);
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, []);
@@ -121,17 +310,15 @@ export default function Dashboard() {
         .from("properties")
         .select("*, saved_properties (id), property_clicks (id)")
         .eq("status", "available");
-
       if (error) throw error;
-
       const transformed = (data || []).map((p: any) => ({
         ...p,
         isSaved: p.saved_properties?.length > 0,
         click_count: p.property_clicks?.length || 0,
       }));
-
       setProperties(transformed);
-      setFilteredProperties(transformed);
+      setAICriteria(null);
+      setUIFilters(defaultUIFilters);
     } catch (error) {
       console.error("Error fetching properties:", error);
       toast({
@@ -147,10 +334,9 @@ export default function Dashboard() {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) {
-      setFilteredProperties(properties);
+      setAICriteria(null);
       return;
     }
-
     setSearchLoading(true);
     try {
       const model = genAI.getGenerativeModel({ model: "gemini-pro" });
@@ -167,48 +353,19 @@ Return only a JSON object with these fields (use null if not specified):
   "propertyType": "house" | "apartment" | "condo" | "townhouse" or null,
   "location": { "city": string, "state": string } or null,
   "squareFeet": number or null
-}`;
-
+}
+      `;
       const result = await model.generateContent(prompt);
       const response = result.response.text();
       const jsonMatch = response.match(/\{[\s\S]*\}/);
-
       if (!jsonMatch) {
         throw new Error("Invalid response format from AI model");
       }
-
-      // Convert the matched substring to a JSON object
       const criteria = JSON.parse(jsonMatch[0]);
-      const filtered = [...properties].filter((property) => {
-        if (criteria.bedrooms && property.bedrooms < criteria.bedrooms) return false;
-        if (criteria.bathrooms && property.bathrooms < criteria.bathrooms) return false;
-        if (criteria.minPrice && property.price < criteria.minPrice) return false;
-        if (criteria.maxPrice && property.price > criteria.maxPrice) return false;
-        if (
-          criteria.propertyType &&
-          property.property_type.toLowerCase() !== criteria.propertyType.toLowerCase()
-        )
-          return false;
-        if (criteria.location) {
-          if (
-            criteria.location.city &&
-            !property.city.toLowerCase().includes(criteria.location.city.toLowerCase())
-          )
-            return false;
-          if (
-            criteria.location.state &&
-            !property.state.toLowerCase().includes(criteria.location.state.toLowerCase())
-          )
-            return false;
-        }
-        if (criteria.squareFeet && property.square_feet < criteria.squareFeet) return false;
-        return true;
-      });
-
-      setFilteredProperties(filtered);
+      setAICriteria(criteria);
       toast({
         title: "Search Complete",
-        description: `Found ${filtered.length} matching properties`,
+        description: "AI search criteria applied.",
       });
     } catch (error) {
       console.error("Search error:", error);
@@ -224,27 +381,55 @@ Return only a JSON object with these fields (use null if not specified):
 
   const resetSearch = () => {
     setSearchQuery("");
-    setFilteredProperties(properties);
+    setAICriteria(null);
   };
+
+  const handleSaveToggle = async (propertyId: string) => {
+    try {
+      const property = filteredProperties.find((p) => p.id === propertyId);
+      const alreadySaved = property?.isSaved;
+      if (alreadySaved) {
+        await supabase
+          .from("saved_properties")
+          .delete()
+          .match({ property_id: propertyId });
+      } else {
+        await supabase.from("saved_properties").insert([
+          {
+            property_id: propertyId,
+            user_id: "fake-user-id",
+          },
+        ]);
+      }
+      await fetchProperties();
+    } catch (err) {
+      console.error("Error toggling property save:", err);
+      toast({
+        title: "Error",
+        description: "Could not save property.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const popularProperties = [...filteredProperties]
+    .sort((a, b) => (b.click_count || 0) - (a.click_count || 0))
+    .slice(0, 5);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50/50 via-background to-background dark:from-background dark:to-background">
-      {/* NAV/HEADER with additional top padding and "hero-like" styling */}
       <header className="relative overflow-hidden bg-white/50 dark:bg-transparent backdrop-blur-sm border-b">
         <div
           ref={searchRef}
-          className="container mx-auto px-4 py-16 flex flex-col items-center" /* Increased top padding */
+          className="container mx-auto px-4 py-16 flex flex-col items-center"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           <div className="relative w-full max-w-3xl">
-            {/* Radial glow effect overlay */}
             <div
               className="pointer-events-none absolute inset-0 transition-opacity duration-300"
               style={getGlowStyles()}
             />
-
-            {/* Title */}
             <motion.h1
               className="text-3xl font-bold bg-gradient-to-r from-blue-950 via-blue-800 to-blue-600 dark:from-primary dark:to-blue-600 bg-clip-text text-transparent drop-shadow-sm mb-6 text-center"
               initial={{ opacity: 0, y: -20 }}
@@ -253,8 +438,6 @@ Return only a JSON object with these fields (use null if not specified):
             >
               Property Dashboard
             </motion.h1>
-
-            {/* AI Search Form + Filter Button on the same row */}
             <motion.form
               onSubmit={handleSearch}
               className="flex flex-wrap gap-2 items-center"
@@ -267,16 +450,15 @@ Return only a JSON object with these fields (use null if not specified):
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder='Try: "I need a 2 bedroom apartment in State College under $1500"'
-                  className="pl-10 bg-white/50 dark:bg-white/5 backdrop-blur-sm border-blue-900/20 dark:border-white/10 focus:border-blue-800 dark:focus:border-primary transition-colors animate-pulse"
+                  className="pl-10 bg-white/50 dark:bg-white/5 backdrop-blur-sm border-blue-900/20 dark:border-white/10 focus:border-blue-800 dark:focus:border-primary transition-colors"
                   disabled={searchLoading}
                 />
                 <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-900/40 dark:text-blue-400/40 transition-colors group-hover:text-blue-900 dark:group-hover:text-blue-400" />
               </div>
-
               <Button
                 type="submit"
                 disabled={searchLoading}
-                className="bg-gradient-to-r from-blue-950 to-blue-800 dark:from-primary dark:to-blue-600 hover:shadow-lg hover:shadow-blue-600/20 dark:hover:shadow-primary/20 transition-all"
+                className="bg-gradient-to-r from-blue-950 to-blue-800 dark:from-primary dark:to-blue-600 hover:shadow-lg hover:shadow-blue-600/20 dark:hover:shadow-primary/20"
               >
                 {searchLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -284,46 +466,68 @@ Return only a JSON object with these fields (use null if not specified):
                   <SearchIcon className="h-4 w-4" />
                 )}
               </Button>
-
-              {filteredProperties.length !== properties.length && (
+              {(aiCriteria || searchQuery) && (
                 <Button
                   type="button"
                   variant="outline"
                   onClick={resetSearch}
-                  className="border-blue-900/20 dark:border-white/20 hover:border-blue-800 hover:bg-blue-50 dark:hover:border-primary dark:hover:bg-primary/10"
+                  className="border-blue-900/20 dark:border-white/20 hover:border-blue-800 dark:hover:border-primary dark:hover:bg-primary/10"
                 >
                   Reset
                 </Button>
               )}
-
-              {/* Filters Button (now on the same line) */}
               <Dialog open={isFilterOpen} onOpenChange={setIsFilterOpen}>
                 <DialogTrigger asChild>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setIsFilterOpen(true)}
-                    className="flex items-center gap-2 border-blue-900/20 dark:border-white/20 hover:border-blue-800 hover:bg-blue-50 dark:hover:border-primary dark:hover:bg-primary/10"
+                    className="flex items-center gap-2 border-blue-900/20 dark:border-white/20 hover:border-blue-800 dark:hover:border-primary dark:hover:bg-primary/10"
                   >
                     <FilterIcon className="h-5 w-5" />
                     Filters
                   </Button>
                 </DialogTrigger>
-                {/* Full-page-ish modal for Property Filter */}
-                <DialogContent className="max-w-full md:max-w-full h-[95vh] animate-fadeIn overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Property Filters</DialogTitle>
+                <DialogContent className="max-w-4xl h-[90vh] p-0 animate-fadeIn">
+                  <DialogHeader className="p-6 pb-2">
+                    <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-950 via-blue-800 to-blue-600 dark:from-primary dark:to-blue-600 bg-clip-text text-transparent">
+                      Filter Properties
+                    </DialogTitle>
+                    <DialogDescription>
+                      Customize your search with our advanced filters
+                    </DialogDescription>
                   </DialogHeader>
-                  {/* Keep functionality the same */}
-                  <PropertyFilters onFiltersChange={() => {}} />
+                  <div className="p-6 pt-2 overflow-y-auto">
+                    <PropertyFiltersComponent
+                      housingComplexes={housingComplexes}
+                      onFiltersChange={(newFilters) => {
+                        setUIFilters({
+                          searchText: newFilters.searchText,
+                          propertyType: newFilters.propertyType,
+                          beds: newFilters.bedrooms.toString(),
+                          baths: newFilters.bathrooms.toString(),
+                          minSquareFeet:
+                            newFilters.squareFeet[0]?.toString() || "",
+                          maxSquareFeet:
+                            newFilters.squareFeet[1]?.toString() || "",
+                          priceRange: newFilters.priceRange,
+                          address: newFilters.location.address,
+                          city: "",
+                          state: "",
+                          zipCode: "",
+                          radius: newFilters.radius,
+                          isVerified: newFilters.isVerified,
+                        });
+                        setIsFilterOpen(false);
+                      }}
+                    />
+                  </div>
                 </DialogContent>
               </Dialog>
             </motion.form>
           </div>
         </div>
       </header>
-
-      {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <motion.div
           className="flex justify-between items-center mb-8"
@@ -334,7 +538,6 @@ Return only a JSON object with these fields (use null if not specified):
           <h2 className="text-2xl font-semibold bg-gradient-to-r from-blue-950 to-blue-800 dark:from-primary dark:to-blue-600 bg-clip-text text-transparent">
             Available Properties
           </h2>
-
           <div className="flex space-x-3">
             <Button
               variant={viewMode === "list" ? "default" : "outline"}
@@ -364,7 +567,6 @@ Return only a JSON object with these fields (use null if not specified):
             </Button>
           </div>
         </motion.div>
-
         <AnimatePresence mode="wait">
           {viewMode === "list" ? (
             <motion.div
@@ -374,13 +576,58 @@ Return only a JSON object with these fields (use null if not specified):
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.3 }}
             >
-              <PopularProperties properties={filteredProperties} />
+              {popularProperties.length > 0 && (
+                <div className="mb-8">
+                  <h3 className="mb-4 text-xl font-semibold bg-gradient-to-r from-blue-950 to-blue-800 dark:from-primary dark:to-blue-600 bg-clip-text text-transparent">
+                    Popular Properties
+                  </h3>
+                  <div className="flex gap-6 overflow-hidden pb-4">
+                    {popularProperties.map((property) => (
+                      <div
+                        key={property.id}
+                        className="min-w-[22rem] flex-shrink-0"
+                      >
+                        <PopularPropertyCard
+                          id={property.id}
+                          title={property.title}
+                          description={property.description}
+                          price={property.price}
+                          property_type={property.property_type}
+                          bedrooms={property.bedrooms}
+                          bathrooms={property.bathrooms}
+                          square_feet={property.square_feet}
+                          address={property.address}
+                          city={property.city}
+                          state={property.state}
+                          zip_code={property.zip_code}
+                          images={property.images}
+                          is_verified={property.is_verified}
+                          verification_document_url={
+                            property.verification_document_url
+                          }
+                          isSaved={property.isSaved}
+                          sellerId={property.seller_id}
+                          sellerName={property.sellerName}
+                          sellerAvatarUrl={property.sellerAvatarUrl}
+                          sellerRating={property.sellerRating}
+                          click_count={property.click_count}
+                          onSaveToggle={() => handleSaveToggle(property.id)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <Card className="backdrop-blur-sm bg-white/50 dark:bg-card/50 border-blue-100 dark:border-white/10">
-                <PropertyList
-                  loading={loading}
-                  properties={filteredProperties}
-                  userLocation={null}
-                />
+                <div className="p-4">
+                  <PropertyList
+                    loading={loading}
+                    properties={filteredProperties}
+                    onSaveToggle={(propertyId: string) =>
+                      handleSaveToggle(propertyId)
+                    }
+                  />
+                </div>
               </Card>
             </motion.div>
           ) : (
@@ -392,18 +639,15 @@ Return only a JSON object with these fields (use null if not specified):
               transition={{ duration: 0.3 }}
             >
               <Card className="h-[600px] overflow-hidden backdrop-blur-sm bg-white/50 dark:bg-card/50 border-blue-100 dark:border-white/10">
-                <MapAndListView properties={filteredProperties} center={DEFAULT_CENTER} />
+                <MapAndListView
+                  properties={filteredProperties}
+                  center={DEFAULT_CENTER}
+                />
               </Card>
             </motion.div>
           )}
         </AnimatePresence>
       </main>
-
-      {/* Decorative elements */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 h-96 w-96 rounded-full bg-gradient-to-br from-blue-100 to-transparent dark:from-primary/10 dark:to-transparent blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 h-96 w-96 rounded-full bg-gradient-to-tr from-blue-50 to-transparent dark:from-blue-500/10 dark:to-transparent blur-3xl" />
-      </div>
     </div>
   );
 }

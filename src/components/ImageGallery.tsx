@@ -13,9 +13,11 @@ interface ImageGalleryProps {
 }
 
 const ImageGallery: React.FC<ImageGalleryProps> = ({ photos, className }) => {
-  if (!photos || photos.length === 0) {
+  const validPhotos = photos.filter(url => url && typeof url === 'string');
+
+  if (!validPhotos || validPhotos.length === 0) {
     return (
-      <div className="h-40 w-full bg-muted flex items-center justify-center rounded-t-lg">
+      <div className="h-[400px] w-full bg-muted flex items-center justify-center rounded-t-lg">
         <p className="text-muted-foreground">No photos available</p>
       </div>
     );
@@ -28,14 +30,15 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ photos, className }) => {
       pagination={{ clickable: true }}
       spaceBetween={0}
       slidesPerView={1}
-      className={`w-full ${className ? className : "h-40"} rounded-t-lg relative overflow-hidden`}
+      className={`w-full ${className ? className : "h-[400px]"} rounded-t-lg relative overflow-hidden`}
     >
-      {photos.map((url, index) => (
-        <SwiperSlide key={index} className="w-full h-full">
+      {validPhotos.map((url, index) => (
+        <SwiperSlide key={`photo-${index}-${url}`} className="w-full h-full">
           <img
             src={url}
             alt={`Property Photo ${index + 1}`}
             className="w-full h-full object-cover"
+            loading={index === 0 ? "eager" : "lazy"}
           />
         </SwiperSlide>
       ))}

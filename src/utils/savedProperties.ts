@@ -26,6 +26,7 @@ export const checkIfPropertySaved = async (propertyId: string, userId: string) =
 };
 
 export const toggleSaveProperty = async (propertyId: string, userId: string) => {
+  if (!propertyId || !userId) throw new Error("Missing IDs");
   try {
     const isSaved = await checkIfPropertySaved(propertyId, userId);
 

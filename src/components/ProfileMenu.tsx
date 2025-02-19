@@ -84,7 +84,7 @@ export default function ProfileMenu({ profile, onSignOut }: ProfileMenuProps) {
           <AvatarFallback>{initials}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-56 focus:outline-none bg-white border border-gray-200 dark:bg-slate-950 dark:border-slate-800">
         <DropdownMenuLabel>My Account</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => navigate("/profile")}>

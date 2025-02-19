@@ -1,14 +1,18 @@
 // ProfilePage.tsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { UserProfile, UserReview } from "@/types/profile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Star } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -86,16 +90,17 @@ export default function ProfilePage() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Fetch reviews where the current user is the seller.
       const { data: reviewsData, error } = await supabase
         .from("seller_reviews")
-        .select(`
+        .select(
+          `
           *,
           reviewer:profiles!reviewer_id(
             full_name,
             avatar_url
           )
-        `)
+        `
+        )
         .eq("seller_id", user.id)
         .order("created_at", { ascending: false });
 
@@ -106,7 +111,7 @@ export default function ProfilePage() {
     }
   };
 
-  // When a file is selected, show a preview
+  // Handle avatar change and preview
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -140,7 +145,6 @@ export default function ProfilePage() {
         const fileExt = avatarFile.name.split(".").pop();
         const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
-        // Upload the avatar to the "avatars" bucket.
         const { error: uploadError } = await supabase.storage
           .from("avatars")
           .upload(fileName, avatarFile);
@@ -154,7 +158,6 @@ export default function ProfilePage() {
         avatarUrl = publicUrl;
       }
 
-      // Update the profile.
       const { error } = await supabase
         .from("profiles")
         .update({
@@ -188,181 +191,214 @@ export default function ProfilePage() {
   };
 
   if (loading) {
-    return <div className="p-4">Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-lg font-medium">Loading...</p>
+      </div>
+    );
   }
 
   if (!profile) {
-    return <div className="p-4">No profile found</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-lg font-medium">No profile found</p>
+      </div>
+    );
   }
 
   return (
-    <div className="container max-w-4xl mx-auto py-8 px-4 space-y-8">
-      {/* Profile Editing Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Edit Profile</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Member since:{" "}
-            {new Date(profile.created_at).toLocaleDateString(undefined, {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="flex flex-col items-center gap-4">
-              <Avatar className="h-24 w-24">
-                {avatarPreview ? (
-                  <AvatarImage src={avatarPreview} alt="Avatar Preview" />
-                ) : (
-                  <AvatarImage
-                    src={profile.avatar_url || undefined}
-                    alt={profile.full_name}
-                  />
-                )}
-                <AvatarFallback>
-                  {profile.full_name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
-              </Avatar>
-              <Input
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarChange}
-                className="max-w-xs"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="full_name">Full Name</Label>
-                <Input
-                  id="full_name"
-                  value={formData.full_name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, full_name: e.target.value })
-                  }
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={formData.phone_number}
-                  onChange={(e) =>
-                    setFormData({ ...formData, phone_number: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
-                <Input
-                  id="role"
-                  value={profile.role}
-                  disabled
-                  className="cursor-not-allowed opacity-75"
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="bio">Bio</Label>
-                <Textarea
-                  id="bio"
-                  value={formData.bio}
-                  onChange={(e) =>
-                    setFormData({ ...formData, bio: e.target.value })
-                  }
-                  rows={4}
-                />
-              </div>
-            </div>
-
-            <Button type="submit" disabled={updating}>
-              {updating ? "Updating..." : "Update Profile"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      {/* Reviews Tab (only for seller profiles) */}
-      {profile.role === "seller" && (
-        <Card>
+    <div className="min-h-screen py-8 px-4 bg-gradient-to-b from-transparent via-background/50 to-background">
+      <div className="container mx-auto pt-12 space-y-12">
+        {/* Profile Editing Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          style={{ height: "calc(100% - 20px)" }}
+          className="group rounded-xl border border-blue-100 dark:border-white/10 bg-white/50 dark:bg-card/50 backdrop-blur-sm p-8 transition-all hover:shadow-lg hover:shadow-blue-600/20"
+        >
           <CardHeader>
-            <CardTitle>Reviews</CardTitle>
+            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-950 via-blue-800 to-blue-600 bg-clip-text text-transparent">
+              Edit Profile
+            </CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Member since:{" "}
+              {new Date(profile.created_at).toLocaleDateString(undefined, {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </p>
           </CardHeader>
           <CardContent>
-            {reviews.length > 0 ? (
-              <div className="space-y-6">
-                {reviews.map((review) => (
-                  <div key={review.id} className="flex gap-4">
-                    <Avatar>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Clickable avatar area */}
+              <div className="flex flex-col items-center gap-4">
+                <label htmlFor="avatar-upload" className="cursor-pointer">
+                  <Avatar className="h-24 w-24">
+                    {avatarPreview ? (
+                      <AvatarImage src={avatarPreview} alt="Avatar Preview" />
+                    ) : (
                       <AvatarImage
-                        src={review.reviewer?.avatar_url || undefined}
-                        alt={review.reviewer?.full_name}
+                        src={profile.avatar_url || undefined}
+                        alt={profile.full_name}
                       />
-                      <AvatarFallback>
-                        {review.reviewer?.full_name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-medium">
-                          {review.reviewer?.full_name}
-                        </h4>
-                        <div className="flex">
-                          {[...Array(5)].map((_, i) => (
-                            <Star
-                              key={i}
-                              className={`h-4 w-4 ${
-                                i < review.rating
-                                  ? "fill-yellow-400 text-yellow-400"
-                                  : "text-gray-300"
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      <p className="mt-1 text-sm">{review.review_text}</p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(review.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                    )}
+                    <AvatarFallback>
+                      {profile.full_name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                </label>
+                {/* Hidden file input for avatar upload */}
+                <Input
+                  id="avatar-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  className="hidden"
+                />
               </div>
-            ) : (
-              <div className="text-sm text-muted-foreground">
-                No reviews yet.
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="full_name">Full Name</Label>
+                  <Input
+                    id="full_name"
+                    value={formData.full_name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, full_name: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={formData.phone_number}
+                    onChange={(e) =>
+                      setFormData({ ...formData, phone_number: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="role">Role</Label>
+                  <Input
+                    id="role"
+                    value={profile.role}
+                    disabled
+                    className="cursor-not-allowed opacity-75"
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="bio">Bio</Label>
+                  <Textarea
+                    id="bio"
+                    value={formData.bio}
+                    onChange={(e) =>
+                      setFormData({ ...formData, bio: e.target.value })
+                    }
+                    rows={4}
+                  />
+                </div>
               </div>
-            )}
+
+              <Button
+                type="submit"
+                disabled={updating}
+                className="w-full py-3 mt-4 bg-gradient-to-r from-blue-950 to-blue-800 dark:from-primary dark:to-blue-600 hover:shadow-lg hover:shadow-blue-600/20 transition-all"
+              >
+                {updating ? "Updating..." : "Update Profile"}
+              </Button>
+            </form>
           </CardContent>
-        </Card>
-      )}
-      {/* End Reviews Card */}
+        </motion.div>
+
+        {/* Reviews Card (only for seller profiles) */}
+        {profile.role === "seller" && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="group rounded-xl border border-blue-100 dark:border-white/10 bg-white/50 dark:bg-card/50 backdrop-blur-sm p-8 transition-all hover:shadow-lg hover:shadow-blue-600/20"
+          >
+            <CardHeader>
+              <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-950 via-blue-800 to-blue-600 bg-clip-text text-transparent">
+                Reviews
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {reviews.length > 0 ? (
+                <div className="space-y-6">
+                  {reviews.map((review) => (
+                    <div key={review.id} className="flex gap-4">
+                      <Avatar>
+                        <AvatarImage
+                          src={review.reviewer?.avatar_url || undefined}
+                          alt={review.reviewer?.full_name}
+                        />
+                        <AvatarFallback>
+                          {review.reviewer?.full_name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium">
+                            {review.reviewer?.full_name}
+                          </h4>
+                          <div className="flex">
+                            {[...Array(5)].map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`h-4 w-4 ${
+                                  i < review.rating
+                                    ? "fill-yellow-400 text-yellow-400"
+                                    : "text-gray-300"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <p className="mt-1 text-sm">{review.review_text}</p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(review.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No reviews yet.
+                </p>
+              )}
+            </CardContent>
+          </motion.div>
+        )}
+      </div>
     </div>
   );
 }
