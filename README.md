@@ -7,7 +7,7 @@ HomeHarmony is a modern web application that facilitates property subleasing, co
 ### For Property Sellers
 - 📝 List properties with detailed information and media
 - 🏢 Manage housing complexes and individual properties
-- 💳 Secure payment processing via Stripe Connect
+- 💳 Secure payment processing via Stripe Connect  
 - 📊 Track property views and engagement
 - ✅ Document verification system for lease agreements
 - 💬 Real-time messaging with potential buyers
