@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+// import LoginFormComponent from "./pages/LoginPage";
 import SellerDashboard from "./pages/SellerDashboard";
 import { ChatInterface } from "./components/ChatInterface";
 import { Navigation } from "./components/Navigation";

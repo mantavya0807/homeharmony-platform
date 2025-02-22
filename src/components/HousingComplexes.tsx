@@ -1,3 +1,4 @@
+
 import React, {
   useState,
   useEffect,
@@ -314,7 +315,7 @@ export default function HousingComplexes() {
   return (
     <div
       ref={complexesRef}
-      className="relative min-h-screen overflow-hidden bg-gray-50 dark:bg-gray-900 pt-20 pb-8"
+      className="min-h-screen bg-gradient-to-b from-blue-50/50 via-background to-background dark:from-background dark:to-background pt-20 pb-8"
     >
       {/* Full-Page Background Glow */}
       <div

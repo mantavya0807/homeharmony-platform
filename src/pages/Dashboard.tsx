@@ -27,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import PopularPropertyCard from "@/components/PopularPropertyCard";
 import { PropertyFilters as PropertyFiltersComponent } from "@/components/PropertyFilter";
+import PopularPropertiesScroll from "@/components/PopularPropertiesScroll";
 
 const GEMINI_API_KEY = "AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I";
 if (!GEMINI_API_KEY) {
@@ -55,7 +56,7 @@ interface Property {
   verification_document_url?: string;
   status: string;
   unit?: string;
-  saved_properties?: { id: string }[];
+  saved_properties?: { id: string; user_id?: string }[];
   isSaved?: boolean;
   click_count?: number;
 }
@@ -303,19 +304,38 @@ export default function Dashboard() {
     };
   };
 
+  // Single, merged fetchProperties function
   const fetchProperties = async () => {
     try {
       setLoading(true);
+
+      // Get current user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      // Fetch properties with saved status for current user
       const { data, error } = await supabase
         .from("properties")
-        .select("*, saved_properties (id), property_clicks (id)")
+        .select(`
+          *,
+          saved_properties!left(
+            id,
+            user_id
+          ),
+          property_clicks(id)
+        `)
         .eq("status", "available");
+
       if (error) throw error;
+
       const transformed = (data || []).map((p: any) => ({
         ...p,
-        isSaved: p.saved_properties?.length > 0,
+        isSaved:
+          p.saved_properties?.some((sp: any) => sp.user_id === user?.id) || false,
         click_count: p.property_clicks?.length || 0,
       }));
+
       setProperties(transformed);
       setAICriteria(null);
       setUIFilters(defaultUIFilters);
@@ -386,27 +406,67 @@ Return only a JSON object with these fields (use null if not specified):
 
   const handleSaveToggle = async (propertyId: string) => {
     try {
+      // Get current user
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to save properties",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const property = filteredProperties.find((p) => p.id === propertyId);
       const alreadySaved = property?.isSaved;
+
       if (alreadySaved) {
-        await supabase
+        // Delete saved property record
+        const { error: deleteError } = await supabase
           .from("saved_properties")
           .delete()
-          .match({ property_id: propertyId });
-      } else {
-        await supabase.from("saved_properties").insert([
-          {
+          .match({
             property_id: propertyId,
-            user_id: "fake-user-id",
-          },
-        ]);
+            user_id: user.id,
+          });
+
+        if (deleteError) throw deleteError;
+      } else {
+        // Insert new saved property record
+        const { error: insertError } = await supabase
+          .from("saved_properties")
+          .insert([
+            {
+              property_id: propertyId,
+              user_id: user.id,
+            },
+          ]);
+
+        if (insertError) throw insertError;
       }
-      await fetchProperties();
+
+      // Update local state after successful save/unsave
+      setProperties((prevProperties) =>
+        prevProperties.map((p) =>
+          p.id === propertyId ? { ...p, isSaved: !alreadySaved } : p
+        )
+      );
+
+      toast({
+        title: alreadySaved ? "Property Unsaved" : "Property Saved",
+        description: alreadySaved
+          ? "Property removed from saved items"
+          : "Property added to saved items",
+      });
     } catch (err) {
       console.error("Error toggling property save:", err);
       toast({
         title: "Error",
-        description: "Could not save property.",
+        description: "Could not save property",
         variant: "destructive",
       });
     }
@@ -581,41 +641,10 @@ Return only a JSON object with these fields (use null if not specified):
                   <h3 className="mb-4 text-xl font-semibold bg-gradient-to-r from-blue-950 to-blue-800 dark:from-primary dark:to-blue-600 bg-clip-text text-transparent">
                     Popular Properties
                   </h3>
-                  <div className="flex gap-6 overflow-hidden pb-4">
-                    {popularProperties.map((property) => (
-                      <div
-                        key={property.id}
-                        className="min-w-[22rem] flex-shrink-0"
-                      >
-                        <PopularPropertyCard
-                          id={property.id}
-                          title={property.title}
-                          description={property.description}
-                          price={property.price}
-                          property_type={property.property_type}
-                          bedrooms={property.bedrooms}
-                          bathrooms={property.bathrooms}
-                          square_feet={property.square_feet}
-                          address={property.address}
-                          city={property.city}
-                          state={property.state}
-                          zip_code={property.zip_code}
-                          images={property.images}
-                          is_verified={property.is_verified}
-                          verification_document_url={
-                            property.verification_document_url
-                          }
-                          isSaved={property.isSaved}
-                          sellerId={property.seller_id}
-                          sellerName={property.sellerName}
-                          sellerAvatarUrl={property.sellerAvatarUrl}
-                          sellerRating={property.sellerRating}
-                          click_count={property.click_count}
-                          onSaveToggle={() => handleSaveToggle(property.id)}
-                        />
-                      </div>
-                    ))}
-                  </div>
+                  <PopularPropertiesScroll
+                    properties={popularProperties}
+                    onSaveToggle={handleSaveToggle}
+                  />
                 </div>
               )}
               <Card className="backdrop-blur-sm bg-white/50 dark:bg-card/50 border-blue-100 dark:border-white/10">

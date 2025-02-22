@@ -42,6 +42,7 @@ import {
   ArrowRight,
   ThumbsUp,
 } from "lucide-react";
+import { ImageCarousel } from "./ImageCarousel";
 
 interface ComplexCardProps {
   complex: any;
@@ -368,14 +369,18 @@ export function ComplexCard({ complex, userRole, onSelect }: ComplexCardProps) {
         <Card className="group overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-blue-600/10 dark:hover:shadow-primary/10 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm border-blue-100/50 dark:border-blue-900/50 w-full">
           <CardContent className="p-0">
             <div className="relative overflow-hidden h-48 md:h-60 lg:h-64">
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent z-10" />
-              <ImageGallery
-                photos={
-                  complex.housing_complex_photos?.map((p: any) => p.photo_url) ||
-                  []
-                }
-                className="w-full h-full object-cover"
-              />
+              {complex.housing_complex_photos?.length > 0 ? (
+                <ImageCarousel 
+                  images={complex.housing_complex_photos.map((p: any) => p.photo_url)}
+                  title={complex.name}
+                />
+              ) : (
+                <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                  <Building className="h-12 w-12 text-gray-400" />
+                </div>
+              )}
+              
+              {/* Rest of your content */}
               <div className="absolute bottom-4 left-4 right-4 z-20 space-y-2">
                 <Badge className="bg-primary/90 text-white backdrop-blur-sm">
                   {complex.reviews.length} Reviews
