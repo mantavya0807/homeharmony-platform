@@ -46,14 +46,14 @@ interface Property {
 }
 
 export interface WalkScoreData {
-  status: number;
-  walkscore: number;
-  description: string;
-  updated: string;
-  logo_url: string;
-  more_info_icon: string;
-  more_info_link: string;
-  ws_link: string;
+  status?: number;
+  walkscore?: number;
+  description?: string;
+  updated?: string;
+  logo_url?: string;
+  more_info_icon?: string;
+  more_info_link?: string;
+  ws_link?: string;
   transit?: {
     score: number;
     description: string;
@@ -73,7 +73,7 @@ export interface WalkScoreData {
 
 // Google Maps API key – secure as needed
 const GOOGLE_MAPS_API_KEY = "AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I";
-// Walk Score endpoint URL (development vs production)
+// Walk Score endpoint URL
 const WALK_SCORE_API_URL =
   process.env.NODE_ENV === "development"
     ? "http://localhost:4000/api/walkscore/score"
@@ -82,6 +82,7 @@ const WALK_SCORE_API_URL =
 export default function PropertyDetailsLocation() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
+
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +92,7 @@ export default function PropertyDetailsLocation() {
   const [walkScoreLoading, setWalkScoreLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("map");
 
-  // Fetch property details using Supabase (same as property overview)
+  // 1) Fetch property from Supabase
   const fetchProperty = useCallback(async () => {
     if (!id) {
       setError("No property ID provided");
@@ -118,7 +119,7 @@ export default function PropertyDetailsLocation() {
     }
   }, [id]);
 
-  // Geocode the full address using Google Geocode API
+  // 2) Geocode the full address using Google Geocode API
   const geocodeAddress = useCallback(
     async (address: string) => {
       console.log("Geocoding address:", address);
@@ -155,28 +156,23 @@ export default function PropertyDetailsLocation() {
     [toast]
   );
 
-  // Fetch Walk Score data from the backend
+  // 3) Fetch Walk Score from the backend
   const fetchWalkScore = useCallback(
-    async (address: string, lat: number, lng: number) => {
-      console.log("Fetching Walk Score for:", { address, lat, lng });
+    async (address: string, city: string, state: string, lat: number, lng: number) => {
+      console.log("Fetching Walk Score for:", { address, city, state, lat, lng });
       setWalkScoreLoading(true);
       try {
-        const response = await fetch(
-          `${WALK_SCORE_API_URL}?address=${encodeURIComponent(
-            address
-          )}&lat=${lat}&lon=${lng}`
-        );
+        const url = `${WALK_SCORE_API_URL}?address=${encodeURIComponent(
+          address
+        )}&lat=${lat}&lon=${lng}&city=${encodeURIComponent(city)}&state=${state}`;
+        const response = await fetch(url);
         console.log("Walk Score response status:", response.status);
         const text = await response.text();
         console.log("Walk Score raw response:", text);
-        try {
-          const data = JSON.parse(text);
-          console.log("Parsed Walk Score data:", data);
-          setWalkScoreData(data);
-        } catch (parseError) {
-          console.error("Error parsing Walk Score JSON:", parseError);
-          throw new Error("Invalid JSON response from Walk Score API");
-        }
+
+        const data = JSON.parse(text);
+        console.log("Parsed Walk Score data:", data);
+        setWalkScoreData(data);
       } catch (err: any) {
         console.error("Error fetching Walk Score:", err.message);
         toast({
@@ -191,31 +187,32 @@ export default function PropertyDetailsLocation() {
     [toast]
   );
 
-  // Fetch property on mount using same logic as PropertyOverview
+  // On mount, fetch property
   useEffect(() => {
     fetchProperty();
   }, [fetchProperty]);
 
-  // Build full address and trigger geocoding
+  // Build full address once property is set
   const fullAddress = property
     ? `${property.address}, ${property.city}, ${property.state} ${property.zip_code}`
     : "";
+
+  // Geocode once we have the address
   useEffect(() => {
     if (fullAddress.trim()) {
       geocodeAddress(fullAddress);
     }
   }, [fullAddress, geocodeAddress]);
 
-  // When coordinates are available, fetch Walk Score
+  // Fetch Walk Score once we have coordinates
   useEffect(() => {
-    if (lat !== null && lng !== null && fullAddress.trim()) {
-      fetchWalkScore(fullAddress, lat, lng);
+    if (lat !== null && lng !== null && property) {
+      fetchWalkScore(fullAddress, property.city, property.state, lat, lng);
     }
-  }, [lat, lng, fullAddress, fetchWalkScore]);
+  }, [lat, lng, fullAddress, property, fetchWalkScore]);
 
   if (loading) return <LoadingSpinner />;
-  if (error || !property)
-    return <ErrorDisplay message={error || "Property not found"} />;
+  if (error || !property) return <ErrorDisplay message={error || "Property not found"} />;
 
   return (
     <div className="min-h-screen bg-background">
@@ -237,7 +234,7 @@ export default function PropertyDetailsLocation() {
         </div>
       </motion.div>
 
-      {/* New Seamless Sticky Navbar */}
+      {/* Sticky Navbar */}
       <div className="sticky top-16 z-50 bg-background/70 backdrop-blur-sm py-4 shadow">
         <div className="container mx-auto flex justify-center">
           <Tabs
@@ -303,7 +300,12 @@ export default function PropertyDetailsLocation() {
               ) : (
                 <Card>
                   <CardContent className="p-6">
-                    <TransitView walkScoreData={walkScoreData} />
+                    <TransitView
+                      walkScoreData={walkScoreData}
+                      propertyAddress={fullAddress}
+                      lat={lat || 0}
+                      lon={lng || 0}
+                    />
                   </CardContent>
                 </Card>
               )}

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Building2 } from "lucide-react";
-import { WalkScoreData } from "@/pages/PropertyDetailsLocation";
+import { WalkScoreData } from "@/components/PropertyDetailsLocation";
 
 interface Property {
   id: string;
@@ -44,7 +44,7 @@ const LocationDetailsCard: React.FC<LocationDetailsCardProps> = ({ property, wal
           <Building2 className="h-5 w-5 text-primary" />
           <div>
             <p className="font-medium">Property Type</p>
-            <p className="text-sm text-muted-foreground capitalize">{property.property_type}</p>
+            <p className="text-sm text-gray-500 capitalize">{property.property_type}</p>
           </div>
         </div>
         {property.housing_complex && (
@@ -52,7 +52,7 @@ const LocationDetailsCard: React.FC<LocationDetailsCardProps> = ({ property, wal
             <Building2 className="h-5 w-5 text-primary" />
             <div>
               <p className="font-medium">Housing Complex</p>
-              <p className="text-sm text-muted-foreground">{property.housing_complex.name}</p>
+              <p className="text-sm text-gray-500">{property.housing_complex.name}</p>
             </div>
           </div>
         )}
@@ -60,22 +60,24 @@ const LocationDetailsCard: React.FC<LocationDetailsCardProps> = ({ property, wal
           <div className="pt-4 border-t">
             <p className="font-medium mb-4">Location Scores</p>
             <div className="space-y-3">
-              <div className="bg-accent/50 p-3 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Walk Score</span>
-                  <Badge variant="secondary">{walkScoreData.walkscore}</Badge>
+              {walkScoreData.walkscore !== undefined && (
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Walk Score</span>
+                    <Badge variant="secondary">{walkScoreData.walkscore}</Badge>
+                  </div>
                 </div>
-              </div>
+              )}
               {walkScoreData.transit && (
-                <div className="bg-accent/50 p-3 rounded-lg">
+                <div className="bg-blue-50 p-3 rounded-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Transit Score</span>
                     <Badge variant="secondary">{walkScoreData.transit.score}</Badge>
                   </div>
                 </div>
               )}
-              {walkScoreData.bike && (
-                <div className="bg-accent/50 p-3 rounded-lg">
+              {walkScoreData.bike && walkScoreData.bike.score !== null && (
+                <div className="bg-blue-50 p-3 rounded-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Bike Score</span>
                     <Badge variant="secondary">{walkScoreData.bike.score}</Badge>
