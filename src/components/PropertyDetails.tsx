@@ -5,7 +5,7 @@ import PropertyDetailsOverview from "@/components/PropertyDetailsOverview";
 import PropertyDetailsGallery from "@/components/PropertyDetailsGallery";
 import PropertyDetailsLocation from "@/components/PropertyDetailsLocation";
 
-export default function PropertyDetails({ params }) {
+export default function PropertyDetails({ params }: { params: { id: string } }) {
   const id = params?.id;
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -17,55 +17,25 @@ export default function PropertyDetails({ params }) {
         <div className="absolute -bottom-40 -left-40 h-96 w-96 rounded-full bg-gradient-to-tr from-blue-50 to-transparent dark:from-blue-500/10 dark:to-transparent blur-3xl" />
       </div>
 
-      <Tabs 
-        value={activeTab} 
-        onValueChange={setActiveTab}
-        className="container mx-auto"
-      >
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="container mx-auto">
         {/* Navigation Tabs */}
         <div className="sticky top-16 z-50 pt-4 pb-2 backdrop-blur-sm">
           <div className="container mx-auto flex justify-center">
-            <TabsList className="bg-transparent border-none p-1 relative">
-              <div className="absolute inset-0 bg-accent/40 dark:bg-accent/20 rounded-full blur-md" />
-              <motion.div
-                layoutId="tab-background"
-                className="absolute rounded-full bg-white dark:bg-gray-800"
-                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                style={{
-                  top: 2,
-                  left: activeTab === "overview" ? 2 : activeTab === "gallery" ? "33.33%" : "66.66%",
-                  width: "33.33%",
-                  height: "calc(100% - 4px)",
-                }}
-              />
+            <TabsList className="flex justify-center bg-transparent border-none p-1">
               {["overview", "gallery", "location"].map((tab) => (
                 <TabsTrigger
                   key={tab}
                   value={tab}
-                  className={`
-                    relative px-6 capitalize z-10 transition-all duration-500
-                    data-[state=active]:text-primary
-                    data-[state=active]:shadow-none
-                    data-[state=active]:bg-transparent
-                  `}
+                  className="px-6 py-2 rounded-full transition-colors hover:bg-blue-100 focus:outline-none data-[state=active]:bg-blue-600 data-[state=active]:text-white"
                 >
-                  <span className="relative z-10">{tab}</span>
-                  {activeTab === tab && (
-                    <motion.div
-                      layoutId="active-tab-glow"
-                      className="absolute inset-0 bg-gradient-to-r from-primary/10 to-primary/5 rounded-full blur-sm"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                    />
-                  )}
+                  {tab}
                 </TabsTrigger>
               ))}
             </TabsList>
           </div>
         </div>
 
-        {/* Content Area with seamless integration */}
+        {/* Content Area */}
         <AnimatePresence mode="wait">
           {activeTab === "overview" && (
             <motion.div
@@ -105,7 +75,7 @@ export default function PropertyDetails({ params }) {
               className="pt-16"
             >
               <TabsContent value="location" className="focus-visible:outline-none">
-                <PropertyDetailsLocation propertyId={id} />
+                <PropertyDetailsLocation />
               </TabsContent>
             </motion.div>
           )}

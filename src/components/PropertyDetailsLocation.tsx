@@ -1,18 +1,34 @@
-import { useEffect, useState } from "react";
-import { Loader2, MapPin, Building2 } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { useParams } from "react-router-dom";
+import { MapPin, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
+  CardFooter,
 } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { useParams } from "react-router-dom";
+import { useToast } from "@/components/ui/use-toast";
+import GoogleMap from "@/components/GoogleMap";
+import LocationDetailsCard from "@/components/LocationDetailsCard";
+import TransitView from "@/components/TransitView";
+import NearbyView from "@/components/NearbyView";
+import LoadingSpinner from "@/components/LoadingSpinner";
+import { motion } from "framer-motion";
 
+// Inline error display component (as used in PropertyOverview)
+function ErrorDisplay({ message }: { message: string }) {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <p className="text-destructive text-lg">{message}</p>
+    </div>
+  );
+}
+
+// Component interfaces
 interface Property {
   id: string;
   title: string;
@@ -26,194 +42,189 @@ interface Property {
   housing_complex?: {
     id: string;
     name: string;
-    // Optionally add walk score fields here if stored in your DB
   };
 }
 
-// Your Google Maps API key (for geocoding and maps)
+export interface WalkScoreData {
+  status: number;
+  walkscore: number;
+  description: string;
+  updated: string;
+  logo_url: string;
+  more_info_icon: string;
+  more_info_link: string;
+  ws_link: string;
+  transit?: {
+    score: number;
+    description: string;
+    summary: string;
+  };
+  bike?: {
+    score: number;
+    description: string;
+  };
+  scores?: {
+    [category: string]: {
+      score: number;
+      description: string;
+    };
+  };
+}
+
+// Google Maps API key – secure as needed
 const GOOGLE_MAPS_API_KEY = "AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I";
-// Replace with your Walk Score API key
-const WALK_SCORE_API_KEY = "9624893c394567ecd35e96f8d8a0660d";
-
-function GoogleMap({ address, zoom = 15 }: { address: string; zoom?: number }) {
-  return (
-    <div className="relative h-[500px] w-full rounded-lg overflow-hidden shadow-lg">
-      <iframe
-        className="w-full h-full border-0"
-        loading="lazy"
-        referrerPolicy="no-referrer-when-downgrade"
-        src={`https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_API_KEY}&q=${encodeURIComponent(
-          address
-        )}&zoom=${zoom}`}
-        allowFullScreen
-      />
-    </div>
-  );
-}
-
-// This component embeds the Walk Score widget for transit & commute.
-function TransitCommuteView({
-  fullAddress,
-  lat,
-  lng,
-}: {
-  fullAddress: string;
-  lat: number;
-  lng: number;
-}) {
-  // Construct the Walk Score widget URL.
-  const widgetUrl = `https://www.walkscore.com/score/?format=inline&address=${encodeURIComponent(
-    fullAddress
-  )}&lat=${lat}&lon=${lng}&wsid=${WALK_SCORE_API_KEY}`;
-  return (
-    <div className="w-full">
-      <iframe
-        src={widgetUrl}
-        width="100%"
-        height="600"
-        frameBorder="0"
-        title="Walk Score Widget"
-      ></iframe>
-    </div>
-  );
-}
-
-// This component shows additional neighborhood details (with a link to learn more).
-function NearbyPlacesWidget({ walkScoreData }: { walkScoreData: any }) {
-  if (!walkScoreData) {
-    return <Loader2 className="animate-spin h-8 w-8" />;
-  }
-  return (
-    <div className="space-y-4">
-      <p className="text-lg font-semibold">Neighborhood Details</p>
-      <p className="text-sm text-muted-foreground">
-        {walkScoreData.description ||
-          "No neighborhood description available."}
-      </p>
-      {walkScoreData.ws_link && (
-        <a
-          href={walkScoreData.ws_link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary underline"
-        >
-          Know More on Walk Score
-        </a>
-      )}
-    </div>
-  );
-}
+// Walk Score endpoint URL (development vs production)
+const WALK_SCORE_API_URL =
+  process.env.NODE_ENV === "development"
+    ? "http://localhost:4000/api/walkscore/score"
+    : "/api/walkscore/score";
 
 export default function PropertyDetailsLocation() {
-  const { id: propertyId } = useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // For geocoding and Walk Score
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
-  const [walkScoreData, setWalkScoreData] = useState<any>(null);
+  const [walkScoreData, setWalkScoreData] = useState<WalkScoreData | null>(null);
+  const [walkScoreLoading, setWalkScoreLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("map");
 
-  // Fetch property data
-  useEffect(() => {
-    async function fetchProperty() {
-      if (!propertyId) {
-        setError("No property ID provided.");
-        setLoading(false);
-        return;
-      }
-      try {
-        const { data, error } = await supabase
-          .from("properties")
-          .select(`
-            id, title, address, city, state, zip_code, unit, property_type,
-            housing_complex:housing_complex_id (id, name)
-          `)
-          .eq("id", propertyId)
-          .single();
-
-        if (error) throw error;
-        setProperty(data);
-      } catch (err: any) {
-        console.error("Error fetching property:", err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
+  // Fetch property details using Supabase (same as property overview)
+  const fetchProperty = useCallback(async () => {
+    if (!id) {
+      setError("No property ID provided");
+      setLoading(false);
+      return;
     }
-    fetchProperty();
-  }, [propertyId]);
+    try {
+      const { data, error } = await supabase
+        .from("properties")
+        .select(`
+          id, title, address, city, state, zip_code, unit, property_type,
+          housing_complex:housing_complex_id (id, name)
+        `)
+        .eq("id", id)
+        .single();
+      if (error) throw error;
+      console.log("Fetched property:", data);
+      setProperty(data);
+    } catch (err: any) {
+      console.error("Error fetching property:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
-  // Compute full address once property is loaded
-  const fullAddress = property
-    ? `${property.address}, ${property.city}, ${property.state} ${property.zip_code}`
-    : "";
-
-  // Geocode the address to get latitude and longitude
-  useEffect(() => {
-    if (!fullAddress) return;
-    async function geocode() {
+  // Geocode the full address using Google Geocode API
+  const geocodeAddress = useCallback(
+    async (address: string) => {
+      console.log("Geocoding address:", address);
       try {
         const response = await fetch(
           `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-            fullAddress
+            address
           )}&key=${GOOGLE_MAPS_API_KEY}`
         );
         const data = await response.json();
+        console.log("Geocode response:", data);
         if (data.status === "OK" && data.results.length > 0) {
           const location = data.results[0].geometry.location;
           setLat(location.lat);
           setLng(location.lng);
+          console.log("Coordinates set:", location.lat, location.lng);
+        } else {
+          console.error("Geocoding error:", data.status);
+          toast({
+            title: "Error",
+            description: "Failed to geocode address",
+            variant: "destructive",
+          });
         }
       } catch (err) {
         console.error("Error geocoding address:", err);
+        toast({
+          title: "Error",
+          description: "Failed to get location coordinates",
+          variant: "destructive",
+        });
       }
-    }
-    geocode();
-  }, [fullAddress]);
+    },
+    [toast]
+  );
 
-  // Fetch Walk Score data once lat/lng are available
-  useEffect(() => {
-    if (lat && lng && fullAddress) {
-      async function fetchWalkScore() {
+  // Fetch Walk Score data from the backend
+  const fetchWalkScore = useCallback(
+    async (address: string, lat: number, lng: number) => {
+      console.log("Fetching Walk Score for:", { address, lat, lng });
+      setWalkScoreLoading(true);
+      try {
+        const response = await fetch(
+          `${WALK_SCORE_API_URL}?address=${encodeURIComponent(
+            address
+          )}&lat=${lat}&lon=${lng}`
+        );
+        console.log("Walk Score response status:", response.status);
+        const text = await response.text();
+        console.log("Walk Score raw response:", text);
         try {
-          const wsUrl = `https://api.walkscore.com/score?format=json&address=${encodeURIComponent(
-            fullAddress
-          )}&lat=${lat}&lon=${lng}&wsapikey=${WALK_SCORE_API_KEY}`;
-          const response = await fetch(wsUrl);
-          const data = await response.json();
+          const data = JSON.parse(text);
+          console.log("Parsed Walk Score data:", data);
           setWalkScoreData(data);
-        } catch (err) {
-          console.error("Error fetching Walk Score:", err);
+        } catch (parseError) {
+          console.error("Error parsing Walk Score JSON:", parseError);
+          throw new Error("Invalid JSON response from Walk Score API");
         }
+      } catch (err: any) {
+        console.error("Error fetching Walk Score:", err.message);
+        toast({
+          title: "Warning",
+          description: "Could not load Walk Score information",
+          variant: "warning",
+        });
+      } finally {
+        setWalkScoreLoading(false);
       }
-      fetchWalkScore();
+    },
+    [toast]
+  );
+
+  // Fetch property on mount using same logic as PropertyOverview
+  useEffect(() => {
+    fetchProperty();
+  }, [fetchProperty]);
+
+  // Build full address and trigger geocoding
+  const fullAddress = property
+    ? `${property.address}, ${property.city}, ${property.state} ${property.zip_code}`
+    : "";
+  useEffect(() => {
+    if (fullAddress.trim()) {
+      geocodeAddress(fullAddress);
     }
-  }, [lat, lng, fullAddress]);
+  }, [fullAddress, geocodeAddress]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="animate-spin h-8 w-8" />
-      </div>
-    );
-  }
+  // When coordinates are available, fetch Walk Score
+  useEffect(() => {
+    if (lat !== null && lng !== null && fullAddress.trim()) {
+      fetchWalkScore(fullAddress, lat, lng);
+    }
+  }, [lat, lng, fullAddress, fetchWalkScore]);
 
-  if (error || !property) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground">
-          {error || "Could not load property location"}
-        </p>
-      </div>
-    );
-  }
+  if (loading) return <LoadingSpinner />;
+  if (error || !property)
+    return <ErrorDisplay message={error || "Property not found"} />;
 
   return (
     <div className="min-h-screen bg-background">
       {/* Property Header */}
-      <div className="container mx-auto px-4 py-8">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="container mx-auto px-4 py-8"
+      >
         <div className="flex items-center gap-2 mb-2">
           <MapPin className="h-6 w-6 text-primary" />
           <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-950 via-blue-800 to-blue-600 dark:from-primary dark:to-blue-600 bg-clip-text text-transparent">
@@ -224,115 +235,99 @@ export default function PropertyDetailsLocation() {
           <p className="text-lg">{fullAddress}</p>
           {property.unit && <Badge variant="secondary">Unit {property.unit}</Badge>}
         </div>
+      </motion.div>
+
+      {/* New Seamless Sticky Navbar */}
+      <div className="sticky top-16 z-50 bg-background/70 backdrop-blur-sm py-4 shadow">
+        <div className="container mx-auto flex justify-center">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="w-full max-w-3xl"
+          >
+            <TabsList className="flex justify-around">
+              <TabsTrigger
+                value="map"
+                className="px-6 py-2 rounded-md transition-colors hover:bg-blue-100 focus:outline-none data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              >
+                Map
+              </TabsTrigger>
+              <TabsTrigger
+                value="commute"
+                className="px-6 py-2 rounded-md transition-colors hover:bg-blue-100 focus:outline-none data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              >
+                Transit &amp; Commute
+              </TabsTrigger>
+              <TabsTrigger
+                value="nearby"
+                className="px-6 py-2 rounded-md transition-colors hover:bg-blue-100 focus:outline-none data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              >
+                Nearby Places
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
 
-      {/* Tabs Section */}
-      <div className="container mx-auto px-4 pb-8">
-        <Card className="shadow-lg">
-          <CardContent className="p-6">
-            <Tabs defaultValue="map" className="space-y-6">
-              <TabsList className="bg-muted/50 p-1 gap-1">
-                <TabsTrigger
-                  value="map"
-                  className="data-[state=active]:bg-background"
-                >
-                  Overview
-                </TabsTrigger>
-                <TabsTrigger
-                  value="commute"
-                  className="data-[state=active]:bg-background"
-                >
-                  Transit &amp; Commute
-                </TabsTrigger>
-                <TabsTrigger
-                  value="nearby"
-                  className="data-[state=active]:bg-background"
-                >
-                  Nearby Places
-                </TabsTrigger>
-              </TabsList>
+      {/* Main Content */}
+      <div className="container mx-auto px-4 pb-8 pt-8">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
+          <TabsContent value="map" className="focus-visible:outline-none">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+            >
+              <div className="lg:col-span-2">
+                <Card className="overflow-hidden">
+                  <CardContent className="p-0">
+                    <GoogleMap address={fullAddress} className="w-full h-[500px] rounded-lg" />
+                  </CardContent>
+                </Card>
+              </div>
+              <div>
+                <LocationDetailsCard property={property} walkScoreData={walkScoreData} />
+              </div>
+            </motion.div>
+          </TabsContent>
 
-              {/* Overview Tab */}
-              <TabsContent value="map" className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-2">
-                    <GoogleMap address={fullAddress} />
-                  </div>
-                  <div>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg font-semibold">
-                          Location Details
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-5 w-5 text-primary" />
-                          <div>
-                            <p className="font-medium">Property Type</p>
-                            <p className="text-sm text-muted-foreground capitalize">
-                              {property.property_type}
-                            </p>
-                          </div>
-                        </div>
-                        {property.housing_complex && (
-                          <div className="flex items-center gap-2">
-                            <Building2 className="h-5 w-5 text-primary" />
-                            <div>
-                              <p className="font-medium">Housing Complex</p>
-                              <p className="text-sm text-muted-foreground">
-                                {property.housing_complex.name}
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                        <div className="pt-4">
-                          <p className="font-medium mb-2">Quick Facts</p>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="flex items-center gap-2">
-                              <div className="h-2 w-2 rounded-full bg-primary" />
-                              <span className="text-sm text-muted-foreground">
-                                Walk Score:{" "}
-                                {walkScoreData && walkScoreData.walkscore
-                                  ? walkScoreData.walkscore
-                                  : "Loading..."}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="h-2 w-2 rounded-full bg-primary" />
-                              <span className="text-sm text-muted-foreground">
-                                Transit Score:{" "}
-                                {walkScoreData && walkScoreData.transit
-                                  ? walkScoreData.transit.score
-                                  : "N/A"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </div>
-              </TabsContent>
+          <TabsContent value="commute" className="focus-visible:outline-none">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+            >
+              {walkScoreLoading ? (
+                <LoadingSpinner />
+              ) : (
+                <Card>
+                  <CardContent className="p-6">
+                    <TransitView walkScoreData={walkScoreData} />
+                  </CardContent>
+                </Card>
+              )}
+            </motion.div>
+          </TabsContent>
 
-              {/* Transit & Commute Tab */}
-              <TabsContent value="commute" className="space-y-6">
-                {lat && lng ? (
-                  <TransitCommuteView fullAddress={fullAddress} lat={lat} lng={lng} />
-                ) : (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="animate-spin h-8 w-8" />
-                  </div>
-                )}
-              </TabsContent>
-
-              {/* Nearby Places Tab */}
-              <TabsContent value="nearby" className="space-y-6">
-                <NearbyPlacesWidget walkScoreData={walkScoreData} />
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+          <TabsContent value="nearby" className="focus-visible:outline-none">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+            >
+              {walkScoreLoading ? (
+                <LoadingSpinner />
+              ) : (
+                <Card>
+                  <CardContent className="p-6">
+                    <NearbyView walkScoreData={walkScoreData} />
+                  </CardContent>
+                </Card>
+              )}
+            </motion.div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
