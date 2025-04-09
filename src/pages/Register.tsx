@@ -62,6 +62,12 @@ export default function Register() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
+  // User location state
+  const [userLocation, setUserLocation] = useState<{ lat: number | null; lng: number | null }>({
+    lat: null,
+    lng: null,
+  });
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (containerRef.current) {
@@ -113,6 +119,34 @@ export default function Register() {
     return true;
   };
 
+  const requestLocationAccess = async () => {
+    try {
+      if (navigator.geolocation) {
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0,
+          });
+        });
+
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+
+        return {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+      }
+      return null;
+    } catch (error) {
+      console.log("Location access denied or unavailable:", error);
+      return null;
+    }
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -121,6 +155,9 @@ export default function Register() {
     setError("");
 
     try {
+      // Request location access
+      const locationData = await requestLocationAccess();
+
       await supabase.auth.signOut();
 
       const {
@@ -133,6 +170,11 @@ export default function Register() {
           data: {
             full_name: formData.fullName,
             role: role,
+            // Add location data to user metadata if available
+            ...(locationData && {
+              location_lat: locationData.latitude,
+              location_lng: locationData.longitude,
+            }),
           },
         },
       });
@@ -147,6 +189,11 @@ export default function Register() {
             id: user.id,
             full_name: formData.fullName,
             role: role,
+            // Store location in the profiles table too
+            ...(locationData && {
+              location_latitude: locationData.latitude,
+              location_longitude: locationData.longitude,
+            }),
           },
         ])
         .select()

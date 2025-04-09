@@ -1,3 +1,5 @@
+// server/index.ts
+
 import express from "express";
 import cors from "cors";
 import path from "path";
@@ -5,33 +7,33 @@ import stripeRouter from "./api/stripe";
 import documentVerificationRouter from "./api/documentVerification";
 import geminiRouter from "./api/gemini";
 import propertyClicksRouter from "./api/propertyClicks";
+import walkscoreRouter from "./api/walkscore";
 import dotenv from "dotenv";
-import walkscorerouter from "./api/walkscore";
 
 dotenv.config();
 
 const app = express();
 const __dirname = path.resolve();
 
-// Define allowed origins. You can include both your Supabase URL and your local dev URL.
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:8080',
-  'https://sub-space.me',
-  '*'
-];
-
-// Use CORS with a custom origin callback
+// CORS configuration - UPDATED
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
+  origin: '*', // Allow all origins in development
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true
 }));
+
+// More explicit CORS handling for preflight requests
+app.options('*', cors());
+
+// Simple middleware to add CORS headers to all responses
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -41,7 +43,12 @@ app.use("/api/property-clicks", propertyClicksRouter);
 app.use("/api/stripe", stripeRouter);
 app.use("/api/verify-document", documentVerificationRouter);
 app.use("/api/gemini", geminiRouter);
-app.use("/api/walkscore", walkscorerouter);
+app.use("/api/walkscore", walkscoreRouter);
+
+// Debug endpoint to verify CORS
+app.get("/api/cors-test", (req, res) => {
+  res.json({ success: true, message: "CORS is working correctly" });
+});
 
 // Error handling
 app.use((err, req, res, next) => {

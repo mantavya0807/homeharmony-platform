@@ -13,18 +13,25 @@ export const trackPropertyClick = async (propertyId: string) => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     
+    // Get location from user profile instead of prompting each time
     let latitude = null;
     let longitude = null;
     
-    if (navigator.geolocation) {
+    if (session?.user) {
       try {
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject);
-        });
-        latitude = position.coords.latitude;
-        longitude = position.coords.longitude;
+        // Get stored location from user profile
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('location_latitude, location_longitude')
+          .eq('id', session.user.id)
+          .single();
+          
+        if (profileData) {
+          latitude = profileData.location_latitude;
+          longitude = profileData.location_longitude;
+        }
       } catch (error) {
-        console.log('Location not available:', error);
+        console.log('Error getting profile location:', error);
       }
     }
 

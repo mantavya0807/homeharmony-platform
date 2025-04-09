@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,203 +6,291 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bus, Train, Building, Clock, MapPin, ExternalLink } from "lucide-react";
-import { motion } from "framer-motion";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Bus, Train, AlertCircle, ExternalLink, Loader2 } from "lucide-react";
+import { WalkScoreData } from "@/components/PropertyDetailsLocation";
 
-interface StopDetail {
-  id: string;
-  lat: number;
-  lon: number;
+interface TransitRoute {
+  type: string;
   name: string;
-  route_ids: string[];
-}
-
-interface RouteDetail {
-  id: string;
-  name: string;
-  short_name: string;
-  long_name: string;
-  category: "Rail" | "Bus" | "Other";
-  agency: string;
-  agency_url: string;
-  color: string;
-  text_color: string;
-  description: string | null;
-  stop_ids: string[];
-}
-
-interface NetworkResponse {
-  stops: { [key: string]: StopDetail };
-  routes: { [key: string]: RouteDetail };
+  description?: string;
+  stops?: {
+    name: string;
+    distance?: number;
+  }[];
 }
 
 interface TransitDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   address: string;
+  walkScoreData: WalkScoreData | null;
   lat: number;
   lon: number;
-  walkScoreData: any;
 }
 
-// Simple icon switch
-const CategoryIcon = ({ category }: { category: string }) => {
-  switch (category) {
-    case "Bus":
-      return <Bus className="h-5 w-5" />;
-    case "Rail":
-      return <Train className="h-5 w-5" />;
-    default:
-      return <Building className="h-5 w-5" />;
-  }
-};
-
-export default function TransitDetailsDialog({
+const TransitDetailsDialog: React.FC<TransitDetailsDialogProps> = ({
   open,
   onOpenChange,
   address,
+  walkScoreData,
   lat,
   lon,
-  walkScoreData,
-}: TransitDetailsDialogProps) {
+}) => {
   const [loading, setLoading] = useState(false);
-  const [networkData, setNetworkData] = useState<NetworkResponse | null>(null);
+  const [transitNetwork, setTransitNetwork] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("routes");
 
-  // Fetch the transit network when dialog opens
   useEffect(() => {
-    const fetchNetwork = async () => {
-      if (open) {
+    const fetchTransitNetwork = async () => {
+      if (!open) return;
+
+      try {
         setLoading(true);
-        try {
-          const resp = await fetch(`/api/walkscore/network?lat=${lat}&lon=${lon}`);
-          if (!resp.ok) throw new Error("Failed to fetch transit network");
-          const data: NetworkResponse = await resp.json();
-          setNetworkData(data);
-        } catch (err) {
-          console.error("Error fetching transit network data:", err);
-        } finally {
-          setLoading(false);
+        setError(null);
+
+        // Call the transit network API
+        const apiUrl = import.meta.env.DEV
+          ? 'http://localhost:4000/api'
+          : 'https://sub-space.me/api';
+
+        const response = await fetch(
+          `${apiUrl}/walkscore/network?lat=${lat}&lon=${lon}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
         }
+
+        const data = await response.json();
+        setTransitNetwork(data);
+      } catch (err: any) {
+        console.error("Error fetching transit network:", err);
+        setError(err.message || "Failed to load transit network");
+      } finally {
+        setLoading(false);
       }
     };
-    fetchNetwork();
+
+    fetchTransitNetwork();
   }, [open, lat, lon]);
 
-  const stopsArray = networkData ? Object.values(networkData.stops) : [];
+  // Function to render transit routes
+  const renderTransitRoutes = () => {
+    if (!transitNetwork?.routes || transitNetwork.routes.length === 0) {
+      return (
+        <div className="text-center py-8">
+          <p className="text-muted-foreground">No transit routes available.</p>
+        </div>
+      );
+    }
+
+    // Group routes by type
+    const busRoutes = transitNetwork.routes.filter((route: any) => route.type === "bus");
+    const railRoutes = transitNetwork.routes.filter((route: any) => route.type === "rail");
+    const otherRoutes = transitNetwork.routes.filter(
+      (route: any) => route.type !== "bus" && route.type !== "rail"
+    );
+
+    return (
+      <div className="space-y-6">
+        {busRoutes.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Bus Routes</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {busRoutes.map((route: any, index: number) => (
+                <Card key={`bus-${index}`} className="overflow-hidden">
+                  <CardHeader className="bg-blue-50 dark:bg-blue-900/20 p-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Bus className="h-4 w-4" />
+                      {route.name}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3">
+                    <p className="text-sm text-muted-foreground">
+                      {route.description || "No description available"}
+                    </p>
+                    {route.stops && route.stops.length > 0 && (
+                      <div className="mt-3">
+                        <h4 className="text-xs font-semibold mb-2">Nearby Stops:</h4>
+                        <div className="space-y-2">
+                          {route.stops.slice(0, 3).map((stop: any, i: number) => (
+                            <div key={`stop-${i}`} className="flex items-center justify-between text-xs">
+                              <span>{stop.name}</span>
+                              {stop.distance && (
+                                <Badge variant="outline" className="text-xs">
+                                  {stop.distance.toFixed(1)} miles
+                                </Badge>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {railRoutes.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Rail Routes</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {railRoutes.map((route: any, index: number) => (
+                <Card key={`rail-${index}`} className="overflow-hidden">
+                  <CardHeader className="bg-green-50 dark:bg-green-900/20 p-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Train className="h-4 w-4" />
+                      {route.name}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3">
+                    <p className="text-sm text-muted-foreground">
+                      {route.description || "No description available"}
+                    </p>
+                    {route.stops && route.stops.length > 0 && (
+                      <div className="mt-3">
+                        <h4 className="text-xs font-semibold mb-2">Nearby Stops:</h4>
+                        <div className="space-y-2">
+                          {route.stops.slice(0, 3).map((stop: any, i: number) => (
+                            <div key={`stop-${i}`} className="flex items-center justify-between text-xs">
+                              <span>{stop.name}</span>
+                              {stop.distance && (
+                                <Badge variant="outline" className="text-xs">
+                                  {stop.distance.toFixed(1)} miles
+                                </Badge>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {otherRoutes.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Other Transit Options</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {otherRoutes.map((route: any, index: number) => (
+                <Card key={`other-${index}`} className="overflow-hidden">
+                  <CardHeader className="bg-purple-50 dark:bg-purple-900/20 p-3">
+                    <CardTitle className="text-base capitalize">
+                      {route.type} - {route.name}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3">
+                    <p className="text-sm text-muted-foreground">
+                      {route.description || "No description available"}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Function to render transit summary 
+  const renderTransitSummary = () => {
+    if (!walkScoreData?.transit) {
+      return (
+        <div className="text-center py-8">
+          <p className="text-muted-foreground">No transit summary available.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Transit Summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Transit Score</span>
+                <Badge className="bg-blue-600">{walkScoreData.transit.score}</Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {walkScoreData.transit.description}
+              </p>
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-2">Details</h4>
+                <p className="text-sm">{walkScoreData.transit.summary}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Link to Walk Score */}
+        {walkScoreData.ws_link && (
+          <div className="flex justify-center">
+            <Button 
+              variant="outline" 
+              className="flex items-center gap-2"
+              onClick={() => window.open(walkScoreData.ws_link, '_blank')}
+            >
+              <ExternalLink className="h-4 w-4" />
+              View Full Details on Walk Score
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto p-6">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-semibold">Transit Details</DialogTitle>
-          <DialogDescription className="text-gray-600">
-            Complete transit information for <span className="font-medium">{address}</span>
-          </DialogDescription>
+          <DialogTitle>Transit Details</DialogTitle>
+          <DialogDescription>{address}</DialogDescription>
         </DialogHeader>
 
-        {/* Transit Score Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 my-6">
-          <Card className="bg-gradient-to-br from-blue-50 to-white shadow-md">
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center">
-                <div className="text-6xl font-bold text-blue-600">
-                  {walkScoreData?.transit?.score ?? 0}
-                </div>
-                <div className="mt-2 text-lg font-medium">Transit Score</div>
-                <div className="mt-1 text-sm text-gray-600 text-center">
-                  {walkScoreData?.transit?.description ?? "No transit data"}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="md:col-span-2 shadow-md">
-            <CardHeader>
-              <CardTitle className="text-xl">Summary</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-700">
-                {walkScoreData?.transit?.summary ?? "No transit summary available"}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="routes">Transit Routes</TabsTrigger>
+            <TabsTrigger value="summary">Summary</TabsTrigger>
+          </TabsList>
 
-        {/* Detailed stops/routes from networkData */}
-        <div className="my-6">
-          <h3 className="text-xl font-semibold mb-2">Detailed Transit Network</h3>
-          {loading ? (
-            <div className="text-center py-8 text-gray-600">Loading transit info...</div>
-          ) : networkData && stopsArray.length > 0 ? (
-            stopsArray.map((stop) => (
-              <motion.div
-                key={stop.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="border rounded-lg p-4 shadow-sm mb-4"
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <MapPin className="h-5 w-5 text-blue-500" />
-                  <div>
-                    <h4 className="font-semibold">{stop.name}</h4>
-                    {/* If there's a distance property, you can show it here. */}
-                  </div>
+          <div className="mt-4">
+            <TabsContent value="routes">
+              {loading ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {stop.route_ids.map((routeId) => {
-                    const route = networkData.routes[routeId];
-                    if (!route) return null;
-                    return (
-                      <div
-                        key={route.id}
-                        className="p-3 rounded-lg bg-blue-50"
-                        style={{ borderLeft: `4px solid #${route.color || "000000"}` }}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <CategoryIcon category={route.category} />
-                          <span className="font-semibold">
-                            {route.name || route.short_name}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-2">
-                          {route.description || ""}
-                        </p>
-                        <div className="flex items-center gap-2 text-sm text-gray-500">
-                          <Clock className="h-4 w-4" />
-                          <span>Frequency not available</span>
-                        </div>
-                        {route.agency_url && (
-                          <a
-                            href={route.agency_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-2 flex items-center gap-1 text-sm text-blue-600 hover:underline"
-                          >
-                            {route.agency}
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        )}
-                      </div>
-                    );
-                  })}
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center p-8">
+                  <AlertCircle className="h-8 w-8 text-red-500 mb-2" />
+                  <p className="text-center text-muted-foreground">{error}</p>
                 </div>
-              </motion.div>
-            ))
-          ) : (
-            <p className="text-gray-600">No transit network data available.</p>
-          )}
-        </div>
+              ) : (
+                renderTransitRoutes()
+              )}
+            </TabsContent>
 
-        <div className="mt-6 flex justify-end">
-          <Button
-            onClick={() => onOpenChange(false)}
-            className="px-6 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 transition"
-          >
-            Close
-          </Button>
-        </div>
+            <TabsContent value="summary">
+              {renderTransitSummary()}
+            </TabsContent>
+          </div>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
-}
+};
+
+export default TransitDetailsDialog;
