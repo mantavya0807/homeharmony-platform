@@ -3,7 +3,7 @@
 import express from "express";
 import cors from "cors";
 import path from "path";
-import stripeRouter from "./api/stripe";
+// import stripeRouter from "./api/stripe";
 import documentVerificationRouter from "./api/documentVerification";
 import geminiRouter from "./api/gemini";
 import propertyClicksRouter from "./api/propertyClicks";
@@ -40,7 +40,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Mount API routes
 app.use("/api/property-clicks", propertyClicksRouter);
-app.use("/api/stripe", stripeRouter);
+// app.use("/api/stripe", stripeRouter);  // Commented out Stripe integration
 app.use("/api/verify-document", documentVerificationRouter);
 app.use("/api/gemini", geminiRouter);
 app.use("/api/walkscore", walkscoreRouter);

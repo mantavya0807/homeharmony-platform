@@ -139,7 +139,7 @@ router.get("/score", async (req, res) => {
     }
     
     return res.json(response.data);
-  } catch (error) {
+  } catch (error: unknown) {  // Explicitly type error as unknown
     console.error("Error fetching Walk Score data:", error);
     
     // Return mock data when the API fails
@@ -191,11 +191,11 @@ router.get("/network", async (req, res) => {
 
     // Return mock transit network data
     res.json(getMockTransitNetworkData(latitude, longitude, city as string, state as string));
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error fetching transit network data:", error);
     res.status(500).json({
       error: "Failed to fetch transit network data",
-      message: error.message || "Unknown error"
+      message: error instanceof Error ? error.message : "Unknown error"
     });
   }
 });
