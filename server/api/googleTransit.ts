@@ -1,7 +1,7 @@
 // server/api/googleTransit.ts
 
 import express from "express";
-import { Client } from "@googlemaps/google-maps-services-js";
+import { Client, TravelMode } from "@googlemaps/google-maps-services-js";
 import dotenv from "dotenv";
 import { corsHeaders, corsMiddleware } from "../_shared/cors";
 
@@ -50,7 +50,7 @@ router.get("/directions", async (req, res) => {
       params: {
         origin: origin as string,
         destination: destination as string,
-        mode: "transit" as const,
+        mode: TravelMode.transit,
         departure_time: departureTime,
         alternatives: true,
         key: GOOGLE_MAPS_API_KEY

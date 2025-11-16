@@ -5,7 +5,7 @@ interface GoogleMapProps {
   className?: string;
 }
 
-const GOOGLE_MAPS_API_KEY = "AIzaSyBc9lsvGxCCrT0cvi2o1nm1LyISnz3y_Lo";
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 const GoogleMap: React.FC<GoogleMapProps> = ({ address, className }) => {
   const encodedAddress = encodeURIComponent(address);

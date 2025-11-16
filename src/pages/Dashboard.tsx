@@ -29,7 +29,7 @@ import PopularPropertyCard from "@/components/PopularPropertyCard";
 import { PropertyFilters as PropertyFiltersComponent } from "@/components/PropertyFilter";
 import PopularPropertiesScroll from "@/components/PopularPropertiesScroll";
 
-const GEMINI_API_KEY = "AIzaSyBc9lsvGxCCrT0cvi2o1nm1LyISnz3y_Lo";
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 if (!GEMINI_API_KEY) {
   throw new Error("Gemini API key is not configured");
 }
