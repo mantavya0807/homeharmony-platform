@@ -532,10 +532,10 @@ export default function SellerDashboard() {
           verification_score: verificationResult.score,
           verification_details: verificationResult.matchDetails,
           verified_at: verificationResult.is_verified ? new Date().toISOString() : null,
-          sublease_from: verificationResult.leaseInfo?.startDate
+          sublease_from: verificationResult.leaseInfo?.startDate && verificationResult.leaseInfo.startDate !== 'N/A'
             ? new Date(verificationResult.leaseInfo.startDate).toISOString()
             : null,
-          sublease_to: verificationResult.leaseInfo?.endDate
+          sublease_to: verificationResult.leaseInfo?.endDate && verificationResult.leaseInfo.endDate !== 'N/A'
             ? new Date(verificationResult.leaseInfo.endDate).toISOString()
             : null,
           original_lease_rent: verificationResult.leaseInfo?.originalRent || null,
@@ -684,10 +684,10 @@ export default function SellerDashboard() {
           is_verified: verificationResult.is_verified,
           verification_document_url: publicUrlData.publicUrl,
           verified_at: verificationResult.is_verified ? new Date().toISOString() : null,
-          sublease_from: verificationResult.leaseInfo?.startDate
+          sublease_from: verificationResult.leaseInfo?.startDate && verificationResult.leaseInfo.startDate !== 'N/A'
             ? new Date(verificationResult.leaseInfo.startDate).toISOString()
             : null,
-          sublease_to: verificationResult.leaseInfo?.endDate
+          sublease_to: verificationResult.leaseInfo?.endDate && verificationResult.leaseInfo.endDate !== 'N/A'
             ? new Date(verificationResult.leaseInfo.endDate).toISOString()
             : null,
           original_lease_rent: verificationResult.leaseInfo?.originalRent || null,
@@ -751,6 +751,7 @@ export default function SellerDashboard() {
         sublease_from,
         sublease_to,
         verification_document,
+        utility_bill_document,
         original_lease_rent,
       } = newProperty;
       console.log("Creating new property in Supabase...");
@@ -1138,101 +1139,106 @@ export default function SellerDashboard() {
                           )}
                         </select>
                       </div>
-                      {/* Verification Document with Tooltip */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor="verification_document">
-                            Verification Document (Optional)
-                          </Label>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="h-4 w-4 text-muted-foreground cursor-pointer" />
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs p-2 text-sm text-white bg-gray-800 rounded shadow-lg z-50">
-                              Please upload your rental lease which contains the address, your name, price, and lease period. This helps us verify your property and add security.
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                        <input
-                          type="file"
-                          id="verification_document"
-                          accept="image/*,application/pdf"
-                          onChange={(e) =>
-                            setNewProperty({
-                              ...newProperty,
-                              verification_document: e.target.files?.[0] || null,
-                            })
-                          }
-                          className="rounded-lg border-gray-300 p-2 w-full focus:ring-2 focus:ring-blue-500"
-                        />
-                        {newProperty.verification_document && (
-                          <div className="mt-2 flex items-center space-x-2">
-                            {newProperty.verification_document.type === "application/pdf" ? (
-                              <ImageIcon className="h-6 w-6 text-red-500" />
-                            ) : (
-                              <img
-                                src={URL.createObjectURL(newProperty.verification_document)}
-                                alt="Verification Preview"
-                                className="h-6 w-6 object-cover rounded-lg"
-                              />
-                            )}
-                            <span className="text-sm">
-                              {newProperty.verification_document.name}
-                            </span>
+                      {/* Verification Documents Grid - 2 columns */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Lease Document */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor="verification_document">
+                              Lease Document (Optional)
+                            </Label>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Info className="h-4 w-4 text-muted-foreground cursor-pointer" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs p-2 text-sm text-white bg-gray-800 rounded shadow-lg z-50">
+                                Please upload your rental lease which contains the address, your name, price, and lease period. This helps us verify your property and add security.
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          Upload your rental lease document (image or PDF).
-                        </p>
-                      </div>
-                      {/* Utility Bill Document */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor="utility_bill_document">
-                            Utility Bill (Required for Verification)
-                          </Label>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="h-4 w-4 text-muted-foreground cursor-pointer" />
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs p-2 text-sm text-white bg-gray-800 rounded shadow-lg z-50">
-                              Upload a recent utility bill (electricity, water, gas) from the last 30 days. It must match the name and address on your lease for verification.
-                            </TooltipContent>
-                          </Tooltip>
+                          <input
+                            type="file"
+                            id="verification_document"
+                            accept="image/*,application/pdf"
+                            onChange={(e) =>
+                              setNewProperty({
+                                ...newProperty,
+                                verification_document: e.target.files?.[0] || null,
+                              })
+                            }
+                            className="rounded-lg border-gray-300 p-2 w-full focus:ring-2 focus:ring-blue-500"
+                          />
+                          {newProperty.verification_document && (
+                            <div className="mt-2 flex items-center space-x-2">
+                              {newProperty.verification_document.type === "application/pdf" ? (
+                                <ImageIcon className="h-6 w-6 text-red-500" />
+                              ) : (
+                                <img
+                                  src={URL.createObjectURL(newProperty.verification_document)}
+                                  alt="Verification Preview"
+                                  className="h-6 w-6 object-cover rounded-lg"
+                                />
+                              )}
+                              <span className="text-sm">
+                                {newProperty.verification_document.name}
+                              </span>
+                            </div>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Upload your rental lease document (image or PDF).
+                          </p>
                         </div>
-                        <input
-                          type="file"
-                          id="utility_bill_document"
-                          accept="image/*,application/pdf"
-                          onChange={(e) =>
-                            setNewProperty({
-                              ...newProperty,
-                              utility_bill_document: e.target.files?.[0] || null,
-                            })
-                          }
-                          className="rounded-lg border-gray-300 p-2 w-full focus:ring-2 focus:ring-blue-500"
-                        />
-                        {newProperty.utility_bill_document && (
-                          <div className="mt-2 flex items-center space-x-2">
-                            {newProperty.utility_bill_document.type === "application/pdf" ? (
-                              <ImageIcon className="h-6 w-6 text-blue-500" />
-                            ) : (
-                              <img
-                                src={URL.createObjectURL(newProperty.utility_bill_document)}
-                                alt="Utility Bill Preview"
-                                className="h-6 w-6 object-cover rounded-lg"
-                              />
-                            )}
-                            <span className="text-sm">
-                              {newProperty.utility_bill_document.name}
-                            </span>
+                        
+                        {/* Utility Bill Document */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor="utility_bill_document">
+                              Utility Bill (Required for Verification)
+                            </Label>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Info className="h-4 w-4 text-muted-foreground cursor-pointer" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs p-2 text-sm text-white bg-gray-800 rounded shadow-lg z-50">
+                                Upload a recent utility bill (electricity, water, gas) from the last 30 days. It must match the name and address on your lease for verification.
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          Upload a recent utility bill (last 30 days) showing your name and property address.
-                        </p>
+                          <input
+                            type="file"
+                            id="utility_bill_document"
+                            accept="image/*,application/pdf"
+                            onChange={(e) =>
+                              setNewProperty({
+                                ...newProperty,
+                                utility_bill_document: e.target.files?.[0] || null,
+                              })
+                            }
+                            className="rounded-lg border-gray-300 p-2 w-full focus:ring-2 focus:ring-blue-500"
+                          />
+                          {newProperty.utility_bill_document && (
+                            <div className="mt-2 flex items-center space-x-2">
+                              {newProperty.utility_bill_document.type === "application/pdf" ? (
+                                <ImageIcon className="h-6 w-6 text-blue-500" />
+                              ) : (
+                                <img
+                                  src={URL.createObjectURL(newProperty.utility_bill_document)}
+                                  alt="Utility Bill Preview"
+                                  className="h-6 w-6 object-cover rounded-lg"
+                                />
+                              )}
+                              <span className="text-sm">
+                                {newProperty.utility_bill_document.name}
+                              </span>
+                            </div>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Upload a recent utility bill (last 30 days) showing your name and property address.
+                          </p>
+                        </div>
                       </div>
                     </div>
+                    
                     {/* Address and Unit Inputs */}
                     <AddressInput
                       address={newProperty.address}
@@ -1422,7 +1428,6 @@ export default function SellerDashboard() {
                       baths={property.bathrooms}
                       sqft={property.square_feet}
                       unit={property.unit}
-                      roomTag={property.roomTag}
                       imageUrl={
                         property.images?.[0] ||
                         "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"

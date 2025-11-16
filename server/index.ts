@@ -4,7 +4,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import stripeRouter from "./api/stripe";
-// import documentVerificationRouter from "./api/documentVerification"; // TEMPORARILY DISABLED - breaks Vercel build
+import documentVerificationRouter from "./api/documentVerification";
 import geminiRouter from "./api/gemini";
 import propertyClicksRouter from "./api/propertyClicks";
 import walkscoreRouter from "./api/walkscore";
@@ -44,7 +44,7 @@ app.use(express.urlencoded({ extended: true }));
 // Mount API routes
 app.use("/api/property-clicks", propertyClicksRouter);
 app.use("/api/stripe", stripeRouter);
-// app.use("/api/verify-document", documentVerificationRouter); // TEMPORARILY DISABLED
+app.use("/api/verify-document", documentVerificationRouter);
 app.use("/api/gemini", geminiRouter);
 app.use("/api/walkscore", walkscoreRouter);
 app.use("/api/google-places", googlePlacesRouter);

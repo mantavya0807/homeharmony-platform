@@ -91,8 +91,8 @@ export default function App() {
             const { data: profile } = await Promise.race([profilePromise, timeoutPromise]) as any;
             setUserRole(profile?.role || null);
           } catch (error) {
-            console.warn("Profile fetch timed out, using default role");
-            setUserRole('buyer'); // Default to buyer if fetch fails
+            console.warn("Profile fetch timed out, keeping current role");
+            // Don't change role on timeout - keep whatever role was set before
           }
         } else {
           setUserRole(null);

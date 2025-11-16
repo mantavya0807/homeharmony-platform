@@ -218,6 +218,10 @@ router.post('/refine', async (req, res) => {
  */
 router.post('/refine-dual', async (req, res) => {
   console.log('[Gemini-Dual] Received dual verification request');
+  console.log('[Gemini-Dual] Request body keys:', Object.keys(req.body));
+  console.log('[Gemini-Dual] Has leaseText:', !!req.body.leaseText, 'length:', req.body.leaseText?.length);
+  console.log('[Gemini-Dual] Has utilityBillText:', !!req.body.utilityBillText, 'length:', req.body.utilityBillText?.length);
+  console.log('[Gemini-Dual] Has propertyDetails:', !!req.body.propertyDetails);
 
   // Check Authorization
   const authHeader = req.get('Authorization') || '';
@@ -230,6 +234,7 @@ router.post('/refine-dual', async (req, res) => {
   const { leaseText, utilityBillText, propertyDetails } = req.body;
   if (!leaseText || !utilityBillText || !propertyDetails) {
     console.error('[Gemini-Dual] Missing required fields.');
+    console.error('[Gemini-Dual] Full request body:', JSON.stringify(req.body, null, 2));
     return res.status(400).json({ error: 'Missing required fields (leaseText, utilityBillText, propertyDetails)' });
   }
 

@@ -164,6 +164,14 @@ export function AddressInput({
           </div>
         </div>
         <div className="space-y-2">
+          <Label>Unit/Apt # (Optional)</Label>
+          <Input
+            value={unit}
+            onChange={(e) => onunitChange(e.target.value)}
+            placeholder="e.g. Apt 4B, Unit 707"
+          />
+        </div>
+        <div className="space-y-2">
           <Label>ZIP Code</Label>
           <Input
             value={zipCode}
@@ -242,16 +250,26 @@ export function AddressInput({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label>ZIP Code</Label>
-        <Input
-          value={zipCode}
-          onChange={(e) => onZipCodeChange(e.target.value)}
-          pattern="[0-9]{5}"
-          maxLength={5}
-          placeholder="12345"
-          required
-        />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Unit/Apt # (Optional)</Label>
+          <Input
+            value={unit}
+            onChange={(e) => onunitChange(e.target.value)}
+            placeholder="e.g. Apt 4B, Unit 707"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>ZIP Code</Label>
+          <Input
+            value={zipCode}
+            onChange={(e) => onZipCodeChange(e.target.value)}
+            pattern="[0-9]{5}"
+            maxLength={5}
+            placeholder="12345"
+            required
+          />
+        </div>
       </div>
     </div>
   );

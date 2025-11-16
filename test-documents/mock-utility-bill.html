@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Utility Bill</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 40px;
+            background: white;
+        }
+        .header {
+            background: #003366;
+            color: white;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .company-name {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .info-box {
+            border: 1px solid #ccc;
+            padding: 15px;
+        }
+        .label {
+            font-weight: bold;
+            color: #003366;
+            margin-bottom: 5px;
+        }
+        .amount-due {
+            background: #f0f0f0;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #003366;
+        }
+        .amount {
+            font-size: 32px;
+            font-weight: bold;
+            color: #003366;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #003366;
+            color: white;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #003366;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="company-name">STATE COLLEGE ELECTRIC & GAS</div>
+        <div>1500 Utility Drive, State College, PA 16801</div>
+        <div>Phone: (814) 555-0100 | www.scelectric.com</div>
+    </div>
+
+    <div style="text-align: right; margin-bottom: 30px;">
+        <div style="font-size: 20px; font-weight: bold;">UTILITY BILL</div>
+        <div>Bill Date: December 15, 2024</div>
+        <div>Account #: 4567-8901-2345</div>
+    </div>
+
+    <div class="info-grid">
+        <div class="info-box">
+            <div class="label">ACCOUNT HOLDER</div>
+            <div><strong>John Michael Smith</strong></div>
+            <div>Customer Since: August 2024</div>
+        </div>
+        <div class="info-box">
+            <div class="label">SERVICE ADDRESS</div>
+            <div><strong>601 Vairo Boulevard</strong></div>
+            <div><strong>Unit 304</strong></div>
+            <div>State College, PA 16803</div>
+        </div>
+    </div>
+
+    <div class="info-grid">
+        <div class="info-box">
+            <div class="label">BILLING PERIOD</div>
+            <div>November 15, 2024 - December 14, 2024</div>
+            <div>30 days</div>
+        </div>
+        <div class="info-box">
+            <div class="label">DUE DATE</div>
+            <div style="font-size: 18px; color: #d32f2f;"><strong>January 5, 2025</strong></div>
+        </div>
+    </div>
+
+    <div class="amount-due">
+        <div>AMOUNT DUE</div>
+        <div class="amount">$127.43</div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Service</th>
+                <th>Usage</th>
+                <th>Rate</th>
+                <th>Charges</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Electric Service</td>
+                <td>456 kWh</td>
+                <td>$0.145/kWh</td>
+                <td>$66.12</td>
+            </tr>
+            <tr>
+                <td>Natural Gas</td>
+                <td>23 CCF</td>
+                <td>$1.89/CCF</td>
+                <td>$43.47</td>
+            </tr>
+            <tr>
+                <td>Service Charge</td>
+                <td>-</td>
+                <td>-</td>
+                <td>$12.00</td>
+            </tr>
+            <tr>
+                <td>State Tax (4.5%)</td>
+                <td>-</td>
+                <td>-</td>
+                <td>$5.84</td>
+            </tr>
+            <tr style="font-weight: bold; background: #f0f0f0;">
+                <td colspan="3">TOTAL AMOUNT DUE</td>
+                <td>$127.43</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div style="background: #fff3cd; padding: 15px; margin: 20px 0; border-left: 4px solid #ffc107;">
+        <strong>⚠ PAYMENT REMINDER</strong><br>
+        Please ensure payment is received by January 5, 2025 to avoid late fees.
+    </div>
+
+    <div class="footer">
+        <p><strong>ACCOUNT INFORMATION:</strong></p>
+        <p>Account Number: 4567-8901-2345<br>
+        Customer Name: John Michael Smith<br>
+        Service Address: 601 Vairo Boulevard, Unit 304, State College, PA 16803</p>
+        
+        <p style="margin-top: 20px;">
+        For questions about your bill, please call (814) 555-0100 or visit www.scelectric.com<br>
+        Make checks payable to: State College Electric & Gas
+        </p>
+    </div>
+</body>
+</html>
