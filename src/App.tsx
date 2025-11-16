@@ -44,7 +44,7 @@ export default function App() {
         if (session) {
           // Add timeout to prevent hanging
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Profile query timeout')), 3000)
+            setTimeout(() => reject(new Error('Profile query timeout')), 10000)
           );
           
           const profilePromise = supabase
@@ -53,8 +53,13 @@ export default function App() {
             .eq("id", session.user.id)
             .single();
           
-          const { data: profile } = await Promise.race([profilePromise, timeoutPromise]) as any;
-          setUserRole(profile?.role || null);
+          try {
+            const { data: profile } = await Promise.race([profilePromise, timeoutPromise]) as any;
+            setUserRole(profile?.role || null);
+          } catch (err) {
+            console.warn('Profile fetch timed out, using default role');
+            setUserRole('buyer'); // Default to buyer if fetch fails
+          }
         }
       } catch (error) {
         console.error("Error initializing auth:", error);
@@ -74,7 +79,7 @@ export default function App() {
           try {
             // Add timeout to prevent hanging
             const timeoutPromise = new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Profile query timeout')), 3000)
+              setTimeout(() => reject(new Error('Profile query timeout')), 10000)
             );
             
             const profilePromise = supabase
@@ -86,7 +91,8 @@ export default function App() {
             const { data: profile } = await Promise.race([profilePromise, timeoutPromise]) as any;
             setUserRole(profile?.role || null);
           } catch (error) {
-            console.error("Error fetching user role:", error);
+            console.warn("Profile fetch timed out, using default role");
+            setUserRole('buyer'); // Default to buyer if fetch fails
           }
         } else {
           setUserRole(null);

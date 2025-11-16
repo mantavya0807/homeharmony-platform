@@ -2,12 +2,16 @@
 
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from '../../src/integrations/supabase/types';
 
 // Initialize Supabase client for server-side use
-const supabaseUrl = process.env.VITE_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.VITE_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.VITE_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_PUBLIC_SUPABASE_ANON_KEY || '';
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ Supabase credentials not found in environment variables');
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const router = express.Router();
 

@@ -11,23 +11,8 @@ export const trackPropertyClick = async (propertyId: string) => {
     let latitude = null;
     let longitude = null;
     
-    if (session?.user) {
-      try {
-        // Get stored location from user profile
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('location_latitude, location_longitude')
-          .eq('id', session.user.id)
-          .single();
-          
-        if (profileData) {
-          latitude = profileData.location_latitude;
-          longitude = profileData.location_longitude;
-        }
-      } catch (error) {
-        console.log('Error getting profile location:', error);
-      }
-    }
+    // Location tracking disabled - columns don't exist in profiles table
+    // Can be re-enabled if location_latitude/location_longitude columns are added
 
     const apiUrl = getApiUrl();
     const response = await fetch(`${apiUrl}/property-clicks`, {

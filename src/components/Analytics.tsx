@@ -25,9 +25,12 @@ export function Analytics() {
     // Ensure analytics is loaded before calling pageview
     if (analyticsLoaded && window.va && typeof window.va.pageview === "function") {
       window.va.pageview(location.pathname);
-    } else {
-      console.warn("Vercel Analytics not initialized properly.");
+    } else if (!analyticsLoaded) {
+      // Still loading, don't warn yet
+      return;
     }
+    // If analyticsLoaded is true but window.va is not available, it's likely ad blockers
+    // Don't spam console warnings in this case
   }, [location, analyticsLoaded]);
 
   return null;
