@@ -15,7 +15,8 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const __dirname = path.resolve();
+// Note: __dirname is already available in CommonJS (from tsconfig.server.json)
+// No need to declare it
 
 // CORS configuration - UPDATED
 app.use(cors({
