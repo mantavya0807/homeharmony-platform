@@ -360,7 +360,7 @@ export default function Dashboard() {
     }
     setSearchLoading(true);
     try {
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       const prompt = `
 Search query: "${searchQuery}"
 From this query, extract exact requirements for property search.
