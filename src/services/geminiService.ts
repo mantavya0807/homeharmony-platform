@@ -25,7 +25,7 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 export async function analyzeSearchQuery(query: string): Promise<SearchCriteria> {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
     const prompt = `Analyze this property search query and extract search criteria. Handle misspellings and variations.
     Query: "${query}"
