@@ -1,8 +1,13 @@
 // server/api/propertyClicks.ts
 
 import express from 'express';
-import { supabase } from '@/integrations/supabase/client';
-import type { Database } from '@/integrations/supabase/types';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '../../src/integrations/supabase/types';
+
+// Initialize Supabase client for server-side use
+const supabaseUrl = process.env.VITE_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.VITE_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
 const router = express.Router();
 
