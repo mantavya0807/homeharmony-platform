@@ -29,7 +29,7 @@ import PopularPropertyCard from "@/components/PopularPropertyCard";
 import { PropertyFilters as PropertyFiltersComponent } from "@/components/PropertyFilter";
 import PopularPropertiesScroll from "@/components/PopularPropertiesScroll";
 
-const GEMINI_API_KEY = "AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I";
+const GEMINI_API_KEY = "AIzaSyBc9lsvGxCCrT0cvi2o1nm1LyISnz3y_Lo";
 if (!GEMINI_API_KEY) {
   throw new Error("Gemini API key is not configured");
 }
@@ -315,6 +315,7 @@ export default function Dashboard() {
       } = await supabase.auth.getUser();
 
       // Fetch properties with saved status for current user
+      // EXCLUDE sold properties explicitly
       const { data, error } = await supabase
         .from("properties")
         .select(`
@@ -325,7 +326,7 @@ export default function Dashboard() {
           ),
           property_clicks(id)
         `)
-        .eq("status", "available");
+        .not("status", "eq", "sold");
 
       if (error) throw error;
 
@@ -666,13 +667,13 @@ Return only a JSON object with these fields (use null if not specified):
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
+              className="h-[calc(100vh-280px)]"
             >
-              <Card className="h-[600px] overflow-hidden backdrop-blur-sm bg-white/50 dark:bg-card/50 border-blue-100 dark:border-white/10">
-                <MapAndListView
-                  properties={filteredProperties}
-                  center={DEFAULT_CENTER}
-                />
-              </Card>
+              <MapAndListView
+                properties={filteredProperties}
+                center={DEFAULT_CENTER}
+                onSaveToggle={handleSaveToggle}
+              />
             </motion.div>
           )}
         </AnimatePresence>

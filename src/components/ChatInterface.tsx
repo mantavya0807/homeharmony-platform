@@ -142,6 +142,126 @@ export function ChatInterface() {
     }
   }, [location.state?.chatId, navigate, currentUserId]);
 
+  // Handle sellerId from location state (when clicking "Contact Seller")
+  useEffect(() => {
+    const findOrCreateChat = async () => {
+      if (location.state?.sellerId && currentUserId) {
+        setLoading(true);
+        try {
+          const sellerId = location.state.sellerId;
+
+          // Find existing chat between current user and seller
+          const { data: existingChats } = await supabase
+            .from('chat_participants')
+            .select('chat_id')
+            .eq('user_id', currentUserId);
+
+          if (existingChats && existingChats.length > 0) {
+            // Check if any of these chats include the seller
+            for (const participation of existingChats) {
+              const { data: sellerParticipation } = await supabase
+                .from('chat_participants')
+                .select('chat_id')
+                .eq('chat_id', participation.chat_id)
+                .eq('user_id', sellerId)
+                .single();
+
+              if (sellerParticipation) {
+                // Found existing chat, load it
+                const { data: chat } = await supabase
+                  .from('chats')
+                  .select(`
+                    *,
+                    chat_participants!inner(
+                      profiles(*)
+                    ),
+                    messages(
+                      id,
+                      content,
+                      created_at,
+                      sender_id,
+                      read,
+                      sender:profiles(*)
+                    )
+                  `)
+                  .eq('id', participation.chat_id)
+                  .single();
+
+                if (chat) {
+                  setSelectedChat(chat);
+                  navigate(location.pathname, { replace: true });
+                  setTimeout(() => scrollToBottom(true), 100);
+                  setLoading(false);
+                  return;
+                }
+              }
+            }
+          }
+
+          // No existing chat found, create a new one
+          const { data: newChat, error: chatError } = await supabase
+            .from('chats')
+            .insert({
+              type: 'individual',
+            })
+            .select()
+            .single();
+
+          if (chatError) throw chatError;
+
+          // Add participants
+          const { error: participantsError } = await supabase
+            .from('chat_participants')
+            .insert([
+              { chat_id: newChat.id, user_id: currentUserId },
+              { chat_id: newChat.id, user_id: sellerId },
+            ]);
+
+          if (participantsError) throw participantsError;
+
+          // Load the new chat
+          const { data: chat } = await supabase
+            .from('chats')
+            .select(`
+              *,
+              chat_participants!inner(
+                profiles(*)
+              ),
+              messages(
+                id,
+                content,
+                created_at,
+                sender_id,
+                read,
+                sender:profiles(*)
+              )
+            `)
+            .eq('id', newChat.id)
+            .single();
+
+          if (chat) {
+            setSelectedChat(chat);
+            navigate(location.pathname, { replace: true });
+            setTimeout(() => scrollToBottom(true), 100);
+          }
+        } catch (error) {
+          console.error('Error creating/finding chat:', error);
+          toast({
+            title: "Error",
+            description: "Failed to start conversation",
+            variant: "destructive",
+          });
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    if (currentUserId) {
+      findOrCreateChat();
+    }
+  }, [location.state?.sellerId, currentUserId, navigate]);
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() || !selectedChat) return;

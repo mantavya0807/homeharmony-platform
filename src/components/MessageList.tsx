@@ -91,10 +91,18 @@ export function MessageList({ chatId, currentUserId }) {
         ) || [];
 
         if (unreadMessages.length > 0) {
-          await supabase
+          console.log(`Marking ${unreadMessages.length} messages as read:`, unreadMessages.map(m => m.id));
+          const { data, error } = await supabase
             .from('messages')
             .update({ read: true })
-            .in('id', unreadMessages.map(msg => msg.id));
+            .in('id', unreadMessages.map(msg => msg.id))
+            .select();
+          
+          if (error) {
+            console.error('Error marking messages as read:', error);
+          } else {
+            console.log('Successfully marked messages as read:', data);
+          }
         }
       } catch (error) {
         console.error('Error fetching messages:', error);
@@ -120,10 +128,18 @@ export function MessageList({ chatId, currentUserId }) {
 
             // Mark message as read if we're the receiver
             if (payload.new.sender_id !== currentUserId) {
-              await supabase
+              console.log('Marking new incoming message as read:', payload.new.id);
+              const { data, error } = await supabase
                 .from('messages')
                 .update({ read: true })
-                .eq('id', payload.new.id);
+                .eq('id', payload.new.id)
+                .select();
+              
+              if (error) {
+                console.error('Error marking new message as read:', error);
+              } else {
+                console.log('Successfully marked new message as read:', data);
+              }
             }
           } else if (payload.eventType === 'DELETE') {
             setMessages(prev => prev.filter(msg => msg.id !== payload.old.id));

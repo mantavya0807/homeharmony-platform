@@ -16,6 +16,7 @@ interface SavedProperty {
     city: string;
     state: string;
     images: string[];
+    status: string;
   };
 }
 
@@ -81,7 +82,8 @@ export default function SavedProperties() {
             square_feet,
             city,
             state,
-            images
+            images,
+            status
           )
         `
         )

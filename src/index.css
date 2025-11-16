@@ -111,3 +111,21 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Stripe Card Element - Ensure interactivity */
+.__PrivateStripeElement,
+.__PrivateStripeElement iframe {
+  height: 100% !important;
+  min-height: 40px !important;
+  pointer-events: auto !important;
+  cursor: text !important;
+}
+
+.StripeElement {
+  height: 40px !important;
+  pointer-events: auto !important;
+}
+
+.StripeElement--focus {
+  border-color: hsl(var(--primary)) !important;
+}

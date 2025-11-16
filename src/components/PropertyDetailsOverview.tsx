@@ -304,6 +304,7 @@ export default function PropertyDetailsOverview() {
                 {userRole === "buyer" && (
                   <PaymentButton
                     propertyId={property.id}
+                    propertyTitle={property.title}
                     sellerId={property.seller.id}
                     amount={property.price * 1.05}
                     onSuccess={() => navigate("/dashboard")}
@@ -343,7 +344,10 @@ export default function PropertyDetailsOverview() {
                 >
                   View Profile
                 </Button>
-                <Button className="w-full">
+                <Button 
+                  className="w-full"
+                  onClick={() => navigate('/chat', { state: { sellerId: property.seller.id } })}
+                >
                   <MessageSquare className="h-4 w-4 mr-2" />
                   Contact Seller
                 </Button>

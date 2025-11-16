@@ -1,17 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Utensils, 
   ShoppingBag, 
   Coffee, 
   School, 
-  TreePalm,
-  Building,
-  Bus
+  TreePalm
 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface NearbyViewProps {
   walkScoreData?: {
@@ -23,240 +20,251 @@ interface NearbyViewProps {
       };
     };
     ws_link?: string;
+    snapped_lat?: number;
+    snapped_lon?: number;
   } | null;
   propertyAddress?: string;
   propertyCity?: string;
+  propertyLat?: number;
+  propertyLon?: number;
 }
 
-export default function NearbyView({ walkScoreData, propertyAddress, propertyCity = "State College" }: NearbyViewProps) {
-  const [activeTab, setActiveTab] = useState("nearby");
+interface CategoryData {
+  icon: any;
+  score: number;
+  places: Array<{
+    name: string;
+    vicinity?: string;
+    rating?: number;
+  }>;
+  description: string;
+}
 
-  // This uses real data for State College, PA
-  // Customize for different locations based on propertyCity
-  const nearbyData = {
-    "Dining": {
-      icon: Utensils,
-      score: 88,
-      places: ["Local Restaurants", "Campus Dining", "Cafes"]
-    },
-    "Shopping": {
-      icon: ShoppingBag,
-      score: 85,
-      places: ["Downtown Shops", "College Mall", "Local Boutiques"]
-    },
-    "Coffee": {
-      icon: Coffee,
-      score: 92,
-      places: ["Starbucks", "Student Coffee Shop", "Local Cafe"]
-    },
-    "Education": {
-      icon: School,
-      score: 95,
-      places: ["Penn State University", "State College Schools", "Libraries"]
-    },
-    "Parks": {
-      icon: TreePalm,
-      score: 82,
-      places: ["Sidney Friedman Park", "Campus Green Spaces", "Recreation Areas"]
+export default function NearbyView({ 
+  walkScoreData, 
+  propertyAddress, 
+  propertyCity = "State College",
+  propertyLat,
+  propertyLon
+}: NearbyViewProps) {
+  const [nearbyData, setNearbyData] = useState<Record<string, CategoryData> | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRealPlacesData();
+  }, [propertyLat, propertyLon]);
+
+  const fetchRealPlacesData = async () => {
+    try {
+      // Use Walk Score snapped coordinates or provided coordinates
+      const lat = propertyLat || walkScoreData?.snapped_lat;
+      const lng = propertyLon || walkScoreData?.snapped_lon;
+
+      if (!lat || !lng) {
+        console.warn("No coordinates available, using default data");
+        setNearbyData(getDefaultNearbyData());
+        setLoading(false);
+        return;
+      }
+
+      const apiUrl = import.meta.env.DEV 
+        ? 'http://localhost:4000/api' 
+        : 'https://sub-space.me/api';
+
+      console.log(`Fetching nearby places for coordinates: ${lat}, ${lng}`);
+
+      const response = await fetch(
+        `${apiUrl}/google-places/categories?lat=${lat}&lng=${lng}&radius=1500`,
+        {
+          headers: { 'Accept': 'application/json' },
+          mode: 'cors'
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Nearby places data received:", data);
+
+      if (data.status === "success" && data.categories) {
+        // Transform API data to match our component structure
+        const transformedData: Record<string, CategoryData> = {
+          "Dining": {
+            icon: Utensils,
+            score: data.categories.Dining?.score || 0,
+            description: data.categories.Dining?.description || "No data",
+            places: data.categories.Dining?.places || []
+          },
+          "Shopping": {
+            icon: ShoppingBag,
+            score: data.categories.Shopping?.score || 0,
+            description: data.categories.Shopping?.description || "No data",
+            places: data.categories.Shopping?.places || []
+          },
+          "Coffee": {
+            icon: Coffee,
+            score: data.categories.Coffee?.score || 0,
+            description: data.categories.Coffee?.description || "No data",
+            places: data.categories.Coffee?.places || []
+          },
+          "Education": {
+            icon: School,
+            score: data.categories.Education?.score || 0,
+            description: data.categories.Education?.description || "No data",
+            places: data.categories.Education?.places || []
+          },
+          "Parks": {
+            icon: TreePalm,
+            score: data.categories.Parks?.score || 0,
+            description: data.categories.Parks?.description || "No data",
+            places: data.categories.Parks?.places || []
+          }
+        };
+
+        setNearbyData(transformedData);
+      } else {
+        // Use fallback data if API returns unexpected format
+        setNearbyData(getDefaultNearbyData());
+      }
+
+    } catch (error) {
+      console.error("Error fetching real places data:", error);
+      setNearbyData(getDefaultNearbyData());
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Real transit data for State College
-  const transitData = {
-    routes: [
-      { 
-        type: "bus", 
-        name: "Blue Loop", 
-        description: "Campus loop service",
-        frequency: "Every 15 min",
-        stops: ["College Ave", "Atherton St", "Beaver Ave"]
+  const getDefaultNearbyData = (): Record<string, CategoryData> => {
+    return {
+      "Dining": {
+        icon: Utensils,
+        score: 88,
+        description: "Very Good",
+        places: [
+          { name: "Local Restaurants" },
+          { name: "Campus Dining" },
+          { name: "Cafes" }
+        ]
       },
-      { 
-        type: "bus", 
-        name: "Red Link", 
-        description: "Downtown and campus service",
-        frequency: "Every 20 min",
-        stops: ["Downtown", "College Ave", "University Dr"]
+      "Shopping": {
+        icon: ShoppingBag,
+        score: 85,
+        description: "Very Good",
+        places: [
+          { name: "Downtown Shops" },
+          { name: "College Mall" },
+          { name: "Local Boutiques" }
+        ]
       },
-      { 
-        type: "bus", 
-        name: "White Loop", 
-        description: "Evening and late night service",
-        frequency: "Every 30 min",
-        stops: ["Beaver Ave", "College Ave", "Pattee Library"]
+      "Coffee": {
+        icon: Coffee,
+        score: 92,
+        description: "Excellent",
+        places: [
+          { name: "Starbucks" },
+          { name: "Student Coffee Shop" },
+          { name: "Local Cafe" }
+        ]
+      },
+      "Education": {
+        icon: School,
+        score: 95,
+        description: "Excellent",
+        places: [
+          { name: "Penn State University" },
+          { name: "State College Schools" },
+          { name: "Libraries" }
+        ]
+      },
+      "Parks": {
+        icon: TreePalm,
+        score: 82,
+        description: "Very Good",
+        places: [
+          { name: "Sidney Friedman Park" },
+          { name: "Campus Green Spaces" },
+          { name: "Recreation Areas" }
+        ]
       }
-    ]
+    };
   };
 
-  // Amenities data for typical State College apartment
-  const amenitiesData = [
-    "Laundry Facilities",
-    "High-Speed Internet",
-    "On-Site Parking",
-    "Study Areas",
-    "Fitness Center",
-    "Bike Storage",
-    "Pet Friendly",
-    "Furnished Units",
-    "24/7 Maintenance",
-    "Security System"
-  ];
-
-  // Use the API data if available, otherwise use our default data
-  const categoryData = walkScoreData?.scores || {};
-  
-  // Merge API data with our preset data, keeping scores from API if available
-  const mergedData = Object.keys(nearbyData).reduce((acc, key) => {
-    const apiCategory = Object.entries(categoryData).find(([apiKey]) => 
-      apiKey.toLowerCase() === key.toLowerCase()
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <Card key={i} className="h-full">
+            <CardContent className="p-5">
+              <Skeleton className="h-6 w-24 mb-3" />
+              <Skeleton className="h-10 w-16 mb-2" />
+              <Skeleton className="h-4 w-32 mb-4" />
+              <div className="space-y-2">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     );
-    
-    acc[key] = {
-      ...nearbyData[key],
-      score: apiCategory ? apiCategory[1].score : nearbyData[key].score,
-      places: apiCategory && apiCategory[1].places ? 
-        apiCategory[1].places : nearbyData[key].places
-    };
-    
-    return acc;
-  }, {});
+  }
+
+  if (!nearbyData) {
+    return <div>No data available</div>;
+  }
 
   return (
-    <div className="space-y-6">
-      <Tabs defaultValue="nearby" value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 rounded-md bg-blue-50 dark:bg-slate-800/60">
-          <TabsTrigger 
-            value="nearby" 
-            className="rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-blue-900/30"
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      {Object.entries(nearbyData).map(([category, data], index) => {
+        const Icon = data.icon;
+        return (
+          <motion.div
+            key={category}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
           >
-            Nearby Places
-          </TabsTrigger>
-          <TabsTrigger 
-            value="transit" 
-            className="rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-blue-900/30"
-          >
-            Transit
-          </TabsTrigger>
-          <TabsTrigger 
-            value="amenities" 
-            className="rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-blue-900/30"
-          >
-            Amenities
-          </TabsTrigger>
-        </TabsList>
-        
-        {/* Nearby Places Tab */}
-        <TabsContent value="nearby">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-5">
-            {Object.entries(mergedData).map(([category, data], index) => {
-              const Icon = data.icon;
-              return (
-                <motion.div
-                  key={category}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <Card className="h-full">
-                    <CardContent className="p-5">
-                      <div className="flex justify-between items-center mb-3">
-                        <h3 className="font-medium">{category}</h3>
-                        <Icon className="h-5 w-5 text-primary" />
-                      </div>
-                      
-                      <div className="mb-2">
-                        <div className="text-2xl font-bold">{data.score}</div>
-                        <div className="text-xs text-muted-foreground">Score out of 100</div>
-                      </div>
-                      
-                      <div className="space-y-2 mt-4">
-                        {data.places.map((place, i) => (
-                          <div
-                            key={`${category}-place-${i}`}
-                            className="text-sm p-2 rounded-lg bg-blue-100/60 dark:bg-blue-900/20"
-                          >
-                            {place}
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
-        </TabsContent>
-        
-        {/* Transit Tab */}
-        <TabsContent value="transit">
-          <div className="mt-5 space-y-5">
-            <h3 className="text-lg font-medium">Transit Routes Near {propertyAddress || `${propertyCity}`}</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {transitData.routes.map((route, index) => (
-                <Card key={`route-${index}`} className="overflow-hidden">
-                  <CardContent className="p-5">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30 mt-1">
-                        <Bus className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div className="space-y-2">
-                        <h4 className="font-medium">{route.name}</h4>
-                        <p className="text-sm text-muted-foreground">{route.description}</p>
-                        <div className="flex flex-wrap gap-2">
-                          <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 text-xs rounded-full">
-                            {route.frequency}
-                          </span>
+            <Card className="h-full">
+              <CardContent className="p-5">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-medium">{category}</h3>
+                  <Icon className="h-5 w-5 text-primary" />
+                </div>
+                
+                <div className="mb-2">
+                  <div className="text-2xl font-bold">{data.score}</div>
+                  <div className="text-xs text-muted-foreground">Score out of 100</div>
+                </div>
+                
+                <p className="text-xs text-muted-foreground mb-4">{data.description}</p>
+                
+                <div className="space-y-2 mt-4">
+                  {data.places.slice(0, 5).map((place, i) => (
+                    <div
+                      key={`${category}-place-${i}`}
+                      className="text-sm p-2 rounded-lg bg-blue-100/60 dark:bg-blue-900/20"
+                    >
+                      <div className="font-medium">{place.name}</div>
+                      {place.vicinity && (
+                        <div className="text-xs text-muted-foreground">{place.vicinity}</div>
+                      )}
+                      {place.rating && (
+                        <div className="text-xs text-muted-foreground">
+                          ⭐ {place.rating.toFixed(1)}
                         </div>
-                        <div className="mt-3">
-                          <div className="text-xs font-semibold uppercase text-muted-foreground mb-1">Stops</div>
-                          <div className="flex flex-wrap gap-2">
-                            {route.stops.map((stop, i) => (
-                              <span key={`stop-${i}`} className="text-xs bg-blue-50 dark:bg-blue-950/50 px-2 py-1 rounded-md">
-                                {stop}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
+                      )}
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </TabsContent>
-        
-        {/* Amenities Tab */}
-        <TabsContent value="amenities">
-          <div className="mt-5 space-y-5">
-            <h3 className="text-lg font-medium">Property Amenities</h3>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {amenitiesData.map((amenity, index) => (
-                <Card key={`amenity-${index}`} className="bg-blue-50/80 dark:bg-blue-900/20 border-none">
-                  <CardContent className="p-3 flex items-center gap-3">
-                    <div className="h-2 w-2 rounded-full bg-primary" />
-                    <span className="text-sm">{amenity}</span>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      {walkScoreData?.ws_link && (
-        <div className="flex justify-center mt-8">
-          <Button
-            variant="outline"
-            className="mx-auto"
-            onClick={() => window.open(walkScoreData.ws_link, '_blank')}
-          >
-            View Full Details on Walk Score
-          </Button>
-        </div>
-      )}
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        );
+      })}
     </div>
   );
 }

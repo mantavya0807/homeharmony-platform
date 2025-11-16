@@ -26,7 +26,7 @@ export function useGoogleMaps() {
 
     const script = document.createElement('script');
     // Use one consistent API key here
-    const apiKey = 'AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I';
+    const apiKey = 'AIzaSyBc9lsvGxCCrT0cvi2o1nm1LyISnz3y_Lo';
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker&callback=${callbackName}`;
     script.async = true;
     script.defer = true;

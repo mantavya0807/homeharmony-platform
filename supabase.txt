@@ -1,0 +1,1009 @@
+=-- First drop all existing policies to handle dependencies
+DROP POLICY IF EXISTS "Users can view chats they're part of" ON chats;
+DROP POLICY IF EXISTS "Users can create chats" ON chats;
+DROP POLICY IF EXISTS "Users can view chat participants" ON chat_participants;
+DROP POLICY IF EXISTS "Users can join chats" ON chat_participants;
+DROP POLICY IF EXISTS "Users can view messages in their chats" ON messages;
+DROP POLICY IF EXISTS "Users can send messages to their chats" ON messages;
+
+-- Drop existing tables with CASCADE to handle dependencies
+DROP TABLE IF EXISTS messages CASCADE;
+DROP TABLE IF EXISTS chat_participants CASCADE;
+DROP TABLE IF EXISTS chats CASCADE;
+
+-- Check and create chat_type enum if it doesn't exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'chat_type') THEN
+        CREATE TYPE chat_type AS ENUM ('individual', 'group');
+    END IF;
+END
+$$;
+
+-- Create tables
+CREATE TABLE chats (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    type chat_type NOT NULL,
+    name TEXT,
+    area TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Chat participants table
+CREATE TABLE chat_participants (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    joined_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(chat_id, user_id)
+);
+
+-- Messages table
+CREATE TABLE messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
+    sender_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create indexes for better performance
+CREATE INDEX idx_messages_chat_id ON messages(chat_id);
+CREATE INDEX idx_chat_participants_chat_id ON chat_participants(chat_id);
+CREATE INDEX idx_chat_participants_user_id ON chat_participants(user_id);
+CREATE INDEX idx_chats_area ON chats(area);
+
+-- Enable Row Level Security
+ALTER TABLE chats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+
+-- Create policies for chats
+CREATE POLICY "Users can view chats they're part of" ON chats
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM chat_participants
+            WHERE chat_id = chats.id
+            AND user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can create chats" ON chats
+    FOR INSERT WITH CHECK (
+        auth.uid() IS NOT NULL -- Allow authenticated users to create any type of chat
+    );
+
+-- Create policies for chat_participants
+CREATE POLICY "Users can view chat participants" ON chat_participants
+    FOR SELECT USING (
+        -- A user can view participants of chats they're in
+        chat_id IN (
+            SELECT chat_id 
+            FROM chat_participants 
+            WHERE user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can join chats" ON chat_participants
+    FOR INSERT WITH CHECK (
+        -- Either you're adding yourself
+        user_id = auth.uid() OR
+        -- Or it's a new chat (within last 5 seconds)
+        EXISTS (
+            SELECT 1 
+            FROM chats 
+            WHERE id = chat_participants.chat_id 
+            AND created_at > now() - interval '5 seconds'
+        )
+    );
+
+-- Create policies for messages
+CREATE POLICY "Users can view messages in their chats" ON messages
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM chat_participants
+            WHERE chat_id = messages.chat_id
+            AND user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can send messages to their chats" ON messages
+    FOR INSERT WITH CHECK (
+        sender_id = auth.uid() AND
+        EXISTS (
+            SELECT 1 FROM chat_participants
+            WHERE chat_id = messages.chat_id
+            AND user_id = auth.uid()
+        )
+    );
+
+    -- Enable RLS
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+
+-- Policy for selecting messages
+CREATE POLICY "Users can view messages from their chats" ON messages 
+FOR SELECT USING (
+  EXISTS (
+    SELECT 1 FROM chat_participants 
+    WHERE chat_id = messages.chat_id 
+    AND user_id = auth.uid()
+  )
+);
+
+-- Policy for inserting messages
+CREATE POLICY "Users can send messages to their chats" ON messages 
+FOR INSERT WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM chat_participants 
+    WHERE chat_id = messages.chat_id 
+    AND user_id = auth.uid()
+  )
+);
+
+
+-- Policy to allow authenticated users to create chats
+CREATE POLICY "Allow users to create chats" ON chats
+FOR INSERT TO authenticated
+WITH CHECK (true);
+
+-- Policy to allow chat participants to view their chats
+CREATE POLICY "Allow participants to view chats" ON chats
+FOR SELECT TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM chat_participants
+    WHERE chat_participants.chat_id = id
+    AND chat_participants.user_id = auth.uid()
+  )
+);
+
+-- Policy to allow users to create chat participants
+CREATE POLICY "Allow users to create chat participants" ON chat_participants
+FOR INSERT TO authenticated
+WITH CHECK (true);
+
+-- Policy to allow sending messages in chats you're part of
+CREATE POLICY "Allow sending messages to own chats" ON messages
+FOR INSERT TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM chat_participants
+    WHERE chat_participants.chat_id = chat_id
+    AND chat_participants.user_id = auth.uid()
+  )
+);
+
+
+
+SELECT 
+    tc.table_name, 
+    kcu.column_name,
+    tc.constraint_name,
+    ccu.table_name AS referenced_table
+FROM information_schema.table_constraints AS tc 
+JOIN information_schema.key_column_usage AS kcu
+    ON tc.constraint_name = kcu.constraint_name
+JOIN information_schema.constraint_column_usage AS ccu
+    ON ccu.constraint_name = tc.constraint_name
+WHERE tc.table_name = 'messages'
+    AND tc.constraint_type = 'FOREIGN KEY';
+
+-- Drop existing constraint if it references auth.users
+ALTER TABLE messages 
+    DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
+
+-- Add new constraint referencing profiles
+ALTER TABLE messages 
+    ADD CONSTRAINT messages_sender_id_fkey 
+    FOREIGN KEY (sender_id) REFERENCES profiles(id);
+
+
+-- Add RLS policies
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow users to send messages"
+    ON messages FOR INSERT
+    WITH CHECK (sender_id = auth.uid());
+
+CREATE POLICY "Allow users to read messages in their chats"
+    ON messages FOR select
+    USING (
+        EXISTS (
+            SELECT 1 FROM chat_participants
+            WHERE chat_participants.chat_id = messages.chat_id
+            AND chat_participants.user_id = auth.uid()
+        )
+    );
+
+-- For chat_participants table
+ALTER TABLE chat_participants ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow users to see chat participants"
+    ON chat_participants FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM chat_participants cp
+            WHERE cp.chat_id = chat_id
+            AND cp.user_id = auth.uid()
+        )
+    );
+
+-- For chats table
+ALTER TABLE chats ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "Allow users to see their chats"
+    ON chats FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM chat_participants
+            WHERE chat_participants.chat_id = id
+            AND chat_participants.user_id = auth.uid()
+        )
+    );
+
+-- Add RLS policies
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+
+
+
+
+-- For chat_participants table
+ALTER TABLE chat_participants ENABLE ROW LEVEL SECURITY;
+
+
+
+-- For chats table
+ALTER TABLE chats ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE chat_participants
+ADD CONSTRAINT chat_participants_user_id_fkey 
+FOREIGN KEY (user_id) 
+REFERENCES profiles(id)
+ON DELETE CASCADE;
+
+ALTER TABLE messages
+ADD CONSTRAINT messages_sender_id_fkey 
+FOREIGN KEY (sender_id) 
+REFERENCES profiles(id)
+ON DELETE CASCADE;
+
+
+
+-- Enable Row-Level Security on the housing_complexes table
+ALTER TABLE housing_complexes ENABLE ROW LEVEL SECURITY;
+
+-- Policy to allow all users to select from housing_complexes
+CREATE POLICY "Allow select on housing_complexes for all"
+    ON housing_complexes
+    FOR SELECT
+    USING (true);
+
+-- Policy to allow only sellers to insert into housing_complexes
+CREATE POLICY "Allow insert on housing_complexes for sellers"
+    ON housing_complexes
+    FOR INSERT
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid() AND profiles.role = 'seller'
+        )
+    );
+
+-- Policy to allow only sellers to update housing_complexes
+CREATE POLICY "Allow update on housing_complexes for sellers"
+    ON housing_complexes
+    FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid() AND profiles.role = 'seller'
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid() AND profiles.role = 'seller'
+        )
+    );
+
+-- Policy to allow only sellers to delete from housing_complexes
+CREATE POLICY "Allow delete on housing_complexes for sellers"
+    ON housing_complexes
+    FOR DELETE
+    USING (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid() AND profiles.role = 'seller'
+        )
+    );
+
+-- Force Row-Level Security on the housing_complexes table
+ALTER TABLE housing_complexes FORCE ROW LEVEL SECURITY;
+
+-- Enable Row-Level Security on the housing_complexes table
+ALTER TABLE housing_complexes ENABLE ROW LEVEL SECURITY;
+
+-- Policy to allow all users to select from housing_complexes
+CREATE POLICY "Allow select on housing_complexes for all"
+    ON housing_complexes
+    FOR SELECT
+    USING (true);
+
+-- Policy to allow only sellers to insert into housing_complexes
+CREATE POLICY "Allow insert on housing_complexes for sellers"
+    ON housing_complexes
+    FOR INSERT
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid() AND profiles.role = 'seller'
+        )
+    );
+
+-- Policy to allow only sellers to update housing_complexes
+CREATE POLICY "Allow update on housing_complexes for sellers"
+    ON housing_complexes
+    FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid() AND profiles.role = 'seller'
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid() AND profiles.role = 'seller'
+        )
+    );
+
+-- Policy to allow only sellers to delete from housing_complexes
+CREATE POLICY "Allow delete on housing_complexes for sellers"
+    ON housing_complexes
+    FOR DELETE
+    USING (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid() AND profiles.role = 'seller'
+        )
+    );
+
+-- Force Row-Level Security on the housing_complexes table
+ALTER TABLE housing_complexes FORCE ROW LEVEL SECURITY;
+
+
+ALTER TABLE properties
+ADD COLUMN google_maps_link TEXT;
+
+
+
+-- Add address-related fields to the housing_complexes table
+ALTER TABLE housing_complexes
+ADD COLUMN address text,
+ADD COLUMN city text,
+ADD COLUMN state text,
+ADD COLUMN zip_code text;
+
+
+
+
+
+ALTER TABLE properties
+ADD CONSTRAINT fk_housing_complex
+FOREIGN KEY (housing_complex_id)
+REFERENCES housing_complexes(id);
+
+
+
+-- Remove photo_url from housing_complexes
+ALTER TABLE housing_complexes
+DROP COLUMN photo_url;
+
+
+
+
+-- Add verification fields to properties table
+ALTER TABLE properties
+ADD COLUMN IF NOT EXISTS is_verified boolean DEFAULT false,
+ADD COLUMN IF NOT EXISTS verification_document_url text,
+ADD COLUMN IF NOT EXISTS verified_at timestamptz;
+
+
+-- Enable Row Level Security on the storage.objects table
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+-- Grant SELECT, INSERT, UPDATE, and DELETE permissions to authenticated users
+GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO authenticated;
+
+-- Create a policy to allow sellers to perform SELECT, INSERT, UPDATE, and DELETE operations on their own objects
+CREATE POLICY "Sellers can manage their own housing complex photos"
+ON storage.objects
+FOR ALL
+TO authenticated
+USING (
+  bucket_id = 'property-verifications' AND
+  auth.role() = 'authenticated' AND
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid() AND profiles.role = 'seller'
+  ) AND
+  owner = auth.uid()
+)
+WITH CHECK (
+  bucket_id = 'property-verifications' AND
+  auth.role() = 'authenticated' AND
+  EXISTS (
+    SELECT 1
+    FROM profiles
+    WHERE profiles.id = auth.uid() AND profiles.role = 'seller'
+  ) AND
+  owner = auth.uid()
+);
+
+
+
+-- Allow sellers to upload verification documents
+CREATE POLICY "Sellers can upload verification documents"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'property-verifications' AND
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid() 
+    AND profiles.role = 'seller'
+  )
+);
+
+-- Allow sellers to view verification documents
+CREATE POLICY "Sellers can view verification documents"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'property-verifications' AND
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid() 
+    AND profiles.role = 'seller'
+  )
+);
+
+-- Allow sellers to delete verification documents
+CREATE POLICY "Sellers can delete verification documents"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'property-verifications' AND
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid() 
+    AND profiles.role = 'seller'
+  )
+);
+
+
+
+-- Function to calculate rent differential percentage
+CREATE OR REPLACE FUNCTION calculate_rent_differential()
+  RETURNS TRIGGER
+  LANGUAGE plpgsql
+AS $$
+BEGIN
+  -- Only calculate if we have both original and sublease rent
+  IF NEW.original_lease_rent IS NOT NULL AND NEW.price IS NOT NULL THEN
+    -- Calculate difference percentage
+    NEW.rent_differential := (
+      (NEW.price - NEW.original_lease_rent) / NEW.original_lease_rent * 100
+    )::numeric(5,2);
+    
+    -- Calculate lease term in months if dates are provided
+    IF NEW.sublease_from IS NOT NULL AND NEW.sublease_to IS NOT NULL THEN
+      NEW.original_lease_term := 
+        EXTRACT(YEAR FROM age(NEW.sublease_to, NEW.sublease_from)) * 12 +
+        EXTRACT(MONTH FROM age(NEW.sublease_to, NEW.sublease_from));
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- Create trigger to automatically update rent differential
+CREATE TRIGGER update_rent_differential
+  BEFORE INSERT OR UPDATE ON properties
+  FOR EACH ROW
+  EXECUTE FUNCTION calculate_rent_differential();
+
+
+-- Run this SQL in your Supabase database
+ALTER TABLE properties 
+  ALTER COLUMN rent_differential TYPE numeric(10,2);
+
+
+create table if not exists public.property_clicks (
+    id uuid default uuid_generate_v4() primary key,
+    property_id uuid references public.properties(id) on delete cascade,
+    user_id uuid references auth.users(id) on delete set null,
+    created_at timestamp with time zone default now()
+);
+
+create index if not exists idx_property_clicks_property_id 
+    on public.property_clicks(property_id);
+
+create index if not exists idx_property_clicks_created_at 
+    on public.property_clicks(created_at);
+
+
+    ALTER TABLE seller_reviews
+ADD COLUMN property_id UUID REFERENCES properties(id);
+
+ALTER TABLE seller_reviews
+ADD COLUMN IF NOT EXISTS property_id uuid NOT NULL;
+
+ALTER TABLE seller_reviews
+ADD COLUMN IF NOT EXISTS reply text;
+
+
+-- Schema for Events feature
+
+-- Events Table
+CREATE TABLE events (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+  end_date TIMESTAMP WITH TIME ZONE NOT NULL,
+  location TEXT NOT NULL,
+  capacity INTEGER NOT NULL,
+  organizer TEXT NOT NULL,
+  image_url TEXT,
+  additional_details TEXT,
+  contact_info TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Event Participants Junction Table
+CREATE TABLE event_participants (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  event_id UUID NOT NULL,
+  user_id UUID NOT NULL,
+  joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(event_id, user_id),
+  CONSTRAINT fk_event
+    FOREIGN KEY(event_id) 
+    REFERENCES events(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_user
+    FOREIGN KEY(user_id) 
+    REFERENCES profiles(id)
+    ON DELETE CASCADE
+);
+
+-- Create index for faster queries
+CREATE INDEX idx_event_participants_event_id ON event_participants(event_id);
+CREATE INDEX idx_event_participants_user_id ON event_participants(user_id);
+
+-- Enable Row Level Security
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_participants ENABLE ROW LEVEL SECURITY;
+
+-- Create RLS policies
+-- Everyone can read events
+CREATE POLICY "Everyone can view events"
+  ON events FOR SELECT
+  USING (true);
+
+-- Only authenticated users can create event participants records
+CREATE POLICY "Authenticated users can create event participants"
+  ON event_participants FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
+
+
+-- Users can only delete their own participant records
+CREATE POLICY "Users can delete their own participant records"
+  ON event_participants FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- Only authenticated users can view event participants
+CREATE POLICY "Authenticated users can view event participants"
+  ON event_participants FOR SELECT
+  TO authenticated
+  USING (true);
+
+-- Set up functions for event capacity checks
+
+-- Function to check if an event has available capacity before a user can join
+CREATE OR REPLACE FUNCTION check_event_capacity()
+RETURNS TRIGGER AS $$
+DECLARE
+  event_capacity INTEGER;
+  current_participants INTEGER;
+BEGIN
+  -- Get the event capacity
+  SELECT capacity INTO event_capacity
+  FROM events
+  WHERE id = NEW.event_id;
+  
+  -- Count current participants
+  SELECT COUNT(*) INTO current_participants
+  FROM event_participants
+  WHERE event_id = NEW.event_id;
+  
+  -- Check if adding this participant would exceed capacity
+  IF current_participants >= event_capacity THEN
+    RAISE EXCEPTION 'Event is at full capacity';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger to check capacity before inserting a new participant
+CREATE TRIGGER check_event_capacity_trigger
+BEFORE INSERT ON event_participants
+FOR EACH ROW
+EXECUTE FUNCTION check_event_capacity();
+
+-- Sample data for testing
+INSERT INTO events (
+  title,
+  description,
+  start_date,
+  end_date,
+  location,
+  capacity,
+  organizer,
+  image_url,
+  additional_details,
+  contact_info
+) VALUES 
+(
+  'Summer Kickoff Party',
+  'Join us for our annual summer kickoff celebration! Food, games, and fun activities for everyone.',
+  NOW() + INTERVAL '2 weeks',
+  NOW() + INTERVAL '2 weeks' + INTERVAL '4 hours',
+  'Central Park, New York',
+  50,
+  'Community Events Committee',
+  'https://images.unsplash.com/photo-1530103862676-de8c9debad1d',
+  'Please bring your own blanket or chairs for seating. Food and drinks will be provided.',
+  'events@community.org'
+),
+(
+  'Tech Meetup: Mobile App Development',
+  'Monthly tech meetup focusing on mobile app development. This month features React Native and Flutter.',
+  NOW() + INTERVAL '1 week',
+  NOW() + INTERVAL '1 week' + INTERVAL '3 hours',
+  'Tech Hub, 123 Innovation St',
+  30,
+  'Tech Community Network',
+  'https://images.unsplash.com/photo-1519389950473-47ba0277781c',
+  'Bring your laptop if you want to follow along with the coding examples.',
+  'techmeetup@example.com'
+),
+(
+  'Yoga in the Park',
+  'Start your weekend with a relaxing yoga session in the park. All levels welcome!',
+  NOW() + INTERVAL '3 days',
+  NOW() + INTERVAL '3 days' + INTERVAL '1 hour',
+  'Riverside Park',
+  20,
+  'Mindful Living Group',
+  'https://images.unsplash.com/photo-1545205597-3d9d02c29597',
+  'Please bring your own yoga mat and water bottle. In case of rain, the event will be moved indoors.',
+  'yoga@mindfulgroup.org'
+);
+
+
+
+
+ALTER TABLE chat_participants ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'member';
+ALTER TABLE chat_participants ADD COLUMN IF NOT EXISTS added_by UUID REFERENCES profiles(id);
+ALTER TABLE chat_participants ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ DEFAULT now();
+
+-- Update messages table to add system message support
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_system_message BOOLEAN DEFAULT false;
+
+-- Add user_blocks table if it doesn't exist
+CREATE TABLE IF NOT EXISTS user_blocks (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  blocker_id UUID NOT NULL REFERENCES profiles(id),
+  blocked_id UUID NOT NULL REFERENCES profiles(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  reason TEXT,
+  UNIQUE(blocker_id, blocked_id)
+);
+
+-- Add index for faster user block lookups
+CREATE INDEX IF NOT EXISTS idx_user_blocks_blocker_id ON user_blocks(blocker_id);
+CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked_id ON user_blocks(blocked_id);
+
+-- Add function to prevent users from being added to groups with block relationships
+CREATE OR REPLACE FUNCTION check_group_blocks() RETURNS TRIGGER AS $$
+BEGIN
+  -- Check if the new participant has any blocking relationships with existing group members
+  IF EXISTS (
+    SELECT 1 FROM user_blocks b
+    JOIN chat_participants p ON 
+      (b.blocker_id = p.profile_id OR b.blocked_id = p.profile_id)
+    WHERE 
+      p.chat_id = NEW.chat_id
+      AND (
+        (b.blocker_id = NEW.profile_id AND b.blocked_id = p.profile_id)
+        OR
+        (b.blocked_id = NEW.profile_id AND b.blocker_id = p.profile_id)
+      )
+  ) THEN
+    -- This check will be handled in the application logic instead
+    -- to provide better user feedback
+    -- RAISE EXCEPTION 'Cannot add user to group due to block relationships';
+    -- We'll allow the insert but log a warning
+    RAISE WARNING 'User % being added to group % despite block relationships', NEW.profile_id, NEW.chat_id;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Add trigger for the above function
+DROP TRIGGER IF EXISTS check_group_blocks_trigger ON chat_participants;
+CREATE TRIGGER check_group_blocks_trigger
+BEFORE INSERT ON chat_participants
+FOR EACH ROW EXECUTE FUNCTION check_group_blocks();
+
+-- Create a view to make group membership queries easier
+CREATE OR REPLACE VIEW group_memberships AS
+SELECT
+  c.id AS chat_id,
+  c.group_name,
+  c.group_avatar_url,
+  p.profile_id AS member_id,
+  p.role,
+  p.added_by,
+  p.joined_at,
+  profiles.full_name AS member_name,
+  profiles.avatar_url AS member_avatar
+FROM
+  chat_rooms c
+  JOIN chat_participants p ON c.id = p.chat_id
+  JOIN profiles ON p.profile_id = profiles.id
+WHERE
+  c.type = 'group';
+
+-- Create a function to get a user's groups
+CREATE OR REPLACE FUNCTION get_user_groups(user_id UUID)
+RETURNS TABLE (
+  chat_id UUID,
+  group_name TEXT,
+  is_admin BOOLEAN,
+  member_count BIGINT,
+  last_message TEXT,
+  last_message_at TIMESTAMPTZ
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    c.id,
+    c.group_name,
+    p.role = 'admin' AS is_admin,
+    COUNT(p2.profile_id) AS member_count,
+    c.last_message,
+    c.last_message_at
+  FROM
+    chat_rooms c
+    JOIN chat_participants p ON c.id = p.chat_id AND p.profile_id = user_id
+    JOIN chat_participants p2 ON c.id = p2.chat_id
+  WHERE
+    c.type = 'group'
+  GROUP BY
+    c.id, c.group_name, p.role, c.last_message, c.last_message_at
+  ORDER BY
+    c.last_message_at DESC NULLS LAST;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create a function to add a system message to a chat
+CREATE OR REPLACE FUNCTION add_system_message(
+  p_chat_id UUID,
+  p_content TEXT
+) RETURNS UUID AS $$
+DECLARE
+  message_id UUID;
+BEGIN
+  -- Insert the system message
+  INSERT INTO messages (
+    chat_id,
+    sender_id,
+    content,
+    created_at,
+    is_system_message,
+    read_by
+  )
+  VALUES (
+    p_chat_id,
+    NULL, -- system messages have no sender
+    p_content,
+    NOW(),
+    TRUE,
+    ARRAY[]::UUID[]
+  )
+  RETURNING id INTO message_id;
+  
+  -- Update the chat's last message
+  UPDATE chat_rooms
+  SET
+    last_message = p_content,
+    last_message_at = NOW()
+  WHERE
+    id = p_chat_id;
+    
+  RETURN message_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create a trigger function to add system messages on participant changes
+CREATE OR REPLACE FUNCTION on_chat_participant_change() RETURNS TRIGGER AS $$
+DECLARE
+  chat_type TEXT;
+  user_name TEXT;
+  adder_name TEXT;
+  message_text TEXT;
+BEGIN
+  -- Get chat type
+  SELECT type INTO chat_type FROM chat_rooms WHERE id = 
+    CASE
+      WHEN TG_OP = 'DELETE' THEN OLD.chat_id
+      ELSE NEW.chat_id
+    END;
+  
+  -- Only proceed for group chats
+  IF chat_type != 'group' THEN
+    RETURN NULL;
+  END IF;
+  
+  IF TG_OP = 'INSERT' THEN
+    -- Get user name
+    SELECT full_name INTO user_name FROM profiles WHERE id = NEW.profile_id;
+    
+    -- Get adder name if available
+    IF NEW.added_by IS NOT NULL THEN
+      SELECT full_name INTO adder_name FROM profiles WHERE id = NEW.added_by;
+      message_text := user_name || ' was added by ' || adder_name;
+    ELSE
+      message_text := user_name || ' joined the group';
+    END IF;
+    
+    -- Add system message
+    PERFORM add_system_message(NEW.chat_id, message_text);
+    
+  ELSIF TG_OP = 'DELETE' THEN
+    -- Get user name
+    SELECT full_name INTO user_name FROM profiles WHERE id = OLD.profile_id;
+    
+    -- Determine if user left or was removed
+    -- This is a simplification - app logic can provide more context
+    message_text := user_name || ' left the group';
+    
+    -- Add system message
+    PERFORM add_system_message(OLD.chat_id, message_text);
+  END IF;
+  
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create triggers for participant changes
+DROP TRIGGER IF EXISTS on_chat_participant_insert ON chat_participants;
+CREATE TRIGGER on_chat_participant_insert
+AFTER INSERT ON chat_participants
+FOR EACH ROW EXECUTE FUNCTION on_chat_participant_change();
+
+DROP TRIGGER IF EXISTS on_chat_participant_delete ON chat_participants;
+CREATE TRIGGER on_chat_participant_delete
+AFTER DELETE ON chat_participants
+FOR EACH ROW EXECUTE FUNCTION on_chat_participant
+
+
+
+-- Create get_tables function to list available tables
+CREATE OR REPLACE FUNCTION get_tables()
+RETURNS TABLE (table_name text) AS $$
+BEGIN
+    RETURN QUERY SELECT tablename::text FROM pg_tables WHERE schemaname = 'public';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Check if events table exists and create it if it doesn't
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'events') THEN
+        -- Create events table
+        CREATE TABLE public.events (
+            id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+            end_date TIMESTAMP WITH TIME ZONE NOT NULL,
+            location TEXT NOT NULL,
+            capacity INTEGER NOT NULL,
+            organizer TEXT NOT NULL,
+            image_url TEXT,
+            additional_details TEXT,
+            contact_info TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        
+        -- Add sample data
+        INSERT INTO public.events (
+            title,
+            description,
+            start_date,
+            end_date,
+            location,
+            capacity,
+            organizer,
+            image_url,
+            additional_details,
+            contact_info
+        ) VALUES 
+        (
+            'Summer Kickoff Party',
+            'Join us for our annual summer kickoff celebration! Food, games, and fun activities for everyone.',
+            NOW() + INTERVAL '2 weeks',
+            NOW() + INTERVAL '2 weeks' + INTERVAL '4 hours',
+            'Central Park, New York',
+            50,
+            'Community Events Committee',
+            'https://images.unsplash.com/photo-1530103862676-de8c9debad1d',
+            'Please bring your own blanket or chairs for seating. Food and drinks will be provided.',
+            'events@community.org'
+        ),
+        (
+            'Tech Meetup: Mobile App Development',
+            'Monthly tech meetup focusing on mobile app development. This month features React Native and Flutter.',
+            NOW() + INTERVAL '1 week',
+            NOW() + INTERVAL '1 week' + INTERVAL '3 hours',
+            'Tech Hub, 123 Innovation St',
+            30,
+            'Tech Community Network',
+            'https://images.unsplash.com/photo-1519389950473-47ba0277781c',
+            'Bring your laptop if you want to follow along with the coding examples.',
+            'techmeetup@example.com'
+        ),
+        (
+            'Yoga in the Park',
+            'Start your weekend with a relaxing yoga session in the park. All levels welcome!',
+            NOW() + INTERVAL '3 days',
+            NOW() + INTERVAL '3 days' + INTERVAL '1 hour',
+            'Riverside Park',
+            20,
+            'Mindful Living Group',
+            'https://images.unsplash.com/photo-1545205597-3d9d02c29597',
+            'Please bring your own yoga mat and water bottle. In case of rain, the event will be moved indoors.',
+            'yoga@mindfulgroup.org'
+        );
+    END IF;
+    
+    -- Check if event_participants table exists and create it if it doesn't
+    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'event_participants') THEN
+        CREATE TABLE public.event_participants (
+            id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+            event_id UUID NOT NULL,
+            user_id UUID NOT NULL,
+            joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            UNIQUE(event_id, user_id)
+        );
+        
+        -- Create indexes
+        CREATE INDEX idx_event_participants_event_id ON public.event_participants(event_id);
+        CREATE INDEX idx_event_participants_user_id ON public.event_participants(user_id);
+    END IF;
+END
+$$;
+

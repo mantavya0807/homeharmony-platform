@@ -24,6 +24,8 @@ import ProfilePage from "./components/ProfilePage";
 import UserReviews from "./components/UserReview";
 import StripeConnect from "./components/StripeConnect";
 import { SellerProfile } from "./components/SellerProfile";
+import Checkout from "./pages/Checkout";
+import BuyerPurchases from "./pages/BuyerPurchases";
 
 const queryClient = new QueryClient();
 
@@ -40,11 +42,18 @@ export default function App() {
         setSession(session);
 
         if (session) {
-          const { data: profile } = await supabase
+          // Add timeout to prevent hanging
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Profile query timeout')), 3000)
+          );
+          
+          const profilePromise = supabase
             .from("profiles")
             .select("role")
             .eq("id", session.user.id)
             .single();
+          
+          const { data: profile } = await Promise.race([profilePromise, timeoutPromise]) as any;
           setUserRole(profile?.role || null);
         }
       } catch (error) {
@@ -63,11 +72,18 @@ export default function App() {
 
         if (newSession) {
           try {
-            const { data: profile } = await supabase
+            // Add timeout to prevent hanging
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Profile query timeout')), 3000)
+            );
+            
+            const profilePromise = supabase
               .from("profiles")
               .select("role")
               .eq("id", newSession.user.id)
               .single();
+            
+            const { data: profile } = await Promise.race([profilePromise, timeoutPromise]) as any;
             setUserRole(profile?.role || null);
           } catch (error) {
             console.error("Error fetching user role:", error);
@@ -188,6 +204,19 @@ export default function App() {
                 />
 
                 <Route
+                  path="/purchases"
+                  element={
+                    !session ? (
+                      <Navigate to="/login" replace />
+                    ) : userRole === "seller" ? (
+                      <Navigate to="/seller-dashboard" replace />
+                    ) : (
+                      <BuyerPurchases />
+                    )
+                  }
+                />
+
+                <Route
                   path="/chat"
                   element={
                     !session ? <Navigate to="/login" replace /> : <ChatInterface />
@@ -211,6 +240,13 @@ export default function App() {
                   path="/properties/:id"
                   element={
                     !session ? <Navigate to="/login" replace /> : <PropertyDetails />
+                  }
+                />
+
+                <Route
+                  path="/checkout/:propertyId"
+                  element={
+                    !session ? <Navigate to="/login" replace /> : <Checkout />
                   }
                 />
 

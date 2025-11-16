@@ -54,6 +54,7 @@ export interface PropertyCardProps {
   sellerAvatarUrl?: string;
   sellerRating?: number;
   click_count?: number;
+  status?: string;
   onSaveToggle?: () => Promise<void>;
 }
 
@@ -78,6 +79,7 @@ export function PropertyCard({
   isSaved,
   sellerId,
   sellerName,
+  status,
   sellerAvatarUrl,
   sellerRating,
   click_count,
@@ -167,6 +169,13 @@ export function PropertyCard({
             >
               ${price.toLocaleString()}
             </Badge>
+
+            {/* Sold Badge */}
+            {status === "sold" && (
+              <Badge className="absolute top-2 left-2 bg-red-500 text-white px-3 py-1 rounded-full shadow-md">
+                SOLD
+              </Badge>
+            )}
 
             {/* Save (Like) Button */}
             {onSaveToggle && (

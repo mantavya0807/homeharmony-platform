@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Plus, Upload, X, Image as ImageIcon, Loader2, Info } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Upload, X, Image as ImageIcon, Loader2, Info, User, Calendar, DollarSign } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +35,14 @@ import type { Database } from "@/integrations/supabase/types";
 
 type Property = Database["public"]["Tables"]["properties"]["Row"];
 type HousingComplex = Database["public"]["Tables"]["housing_complexes"]["Row"];
+type Transaction = Database["public"]["Tables"]["transactions"]["Row"];
+type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+
+interface SoldPropertyWithBuyer {
+  property: Property;
+  transaction: Transaction;
+  buyer: Profile;
+}
 
 type PropertyType = "house" | "apartment" | "condo" | "townhouse";
 
@@ -147,6 +157,7 @@ export default function SellerDashboard() {
   // ---------------------------
   const [stripeConnected, setStripeConnected] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [soldProperties, setSoldProperties] = useState<SoldPropertyWithBuyer[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -156,6 +167,7 @@ export default function SellerDashboard() {
   const [isEditDialogOpen, setEditDialogOpen] = useState(false);
   const [housingComplexes, setHousingComplexes] = useState<HousingComplex[]>([]);
   const [loadingHousingComplexes, setLoadingHousingComplexes] = useState(true);
+  const [activeTab, setActiveTab] = useState<"active" | "sold">("active");
 
   const [newProperty, setNewProperty] = useState<PropertyForm>({
     title: "",
@@ -199,6 +211,7 @@ export default function SellerDashboard() {
   // Fetch properties and housing complexes
   useEffect(() => {
     fetchProperties();
+    fetchSoldProperties();
     fetchHousingComplexes();
   }, [navigate]);
 
@@ -222,10 +235,12 @@ export default function SellerDashboard() {
         navigate("/dashboard");
         return;
       }
+      // Fetch active properties - explicitly exclude sold ones
       const { data, error } = await supabase
         .from("properties")
         .select("*")
         .eq("seller_id", session.user.id)
+        .not("status", "eq", "sold")
         .order("created_at", { ascending: false });
       if (error) throw error;
       setProperties(data || []);
@@ -239,6 +254,46 @@ export default function SellerDashboard() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSoldProperties = async () => {
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!session) return;
+
+      // Fetch sold properties with buyer information from transactions
+      const { data, error } = await supabase
+        .from("transactions")
+        .select(`
+          *,
+          property:properties(*),
+          buyer:profiles!transactions_buyer_id_fkey(*)
+        `)
+        .eq("seller_id", session.user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const formattedSoldProperties = (data || []).map((t: any) => ({
+        transaction: t,
+        property: t.property,
+        buyer: t.buyer,
+      }));
+
+      setSoldProperties(formattedSoldProperties);
+      console.log("Fetched Sold Properties:", formattedSoldProperties);
+    } catch (error) {
+      console.error("Error fetching sold properties:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load sold properties",
+        variant: "destructive",
+      });
     }
   };
 
@@ -1116,123 +1171,245 @@ export default function SellerDashboard() {
           onClose={() => setAddComplexOpen(false)}
           onAdd={handleAddComplex}
         />
-        {properties.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="flex flex-col items-center justify-center space-y-4">
-              <div className="p-6 rounded-full bg-primary/10 text-primary">
-                <ImageIcon className="h-12 w-12" />
-              </div>
-              <h2 className="text-2xl font-semibold">No Properties Listed</h2>
-              <p className="text-muted-foreground max-w-sm">
-                Start by adding your first property listing. Click the "Add New Property" button above to get started.
-              </p>
-              <Button onClick={() => setOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Your First Property
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {properties.map((property) => (
-              <div key={property.id} className="group relative">
-                <PropertyCard
-                  id={property.id}
-                  title={property.title}
-                  price={property.price}
-                  location={`${property.city}, ${property.state}`}
-                  beds={property.bedrooms}
-                  baths={property.bathrooms}
-                  sqft={property.square_feet}
-                  unit={property.unit}
-                  roomTag={property.roomTag}
-                  imageUrl={
-                    property.images?.[0] ||
-                    "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"
-                  }
-                />
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 rounded-lg">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setEditingProperty(property);
-                      setEditDialogOpen(true);
-                    }}
-                  >
-                    Edit
-                  </Button>
-                  <EditPropertyDialog
-                    isOpen={isEditDialogOpen && editingProperty?.id === property.id}
-                    onClose={() => {
-                      setEditDialogOpen(false);
-                      setEditingProperty(null);
-                    }}
-                    property={editingProperty}
-                    onUpdate={(updatedProperty) => {
-                      setProperties((prev) =>
-                        prev.map((p) =>
-                          p.id === updatedProperty.id ? updatedProperty : p
-                        )
-                      );
-                    }}
-                  />
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={async () => {
-                      try {
-                        const { error } = await supabase
-                          .from("properties")
-                          .delete()
-                          .eq("id", property.id);
-                        if (error) throw error;
-                        const { data: files } = await supabase.storage
-                          .from("property-media")
-                          .list(`${property.id}`, { limit: 100 });
-                        if (files && files.length > 0) {
-                          const filesToRemove = files.map(
-                            (file) => `${property.id}/${file.name}`
-                          );
-                          await supabase.storage.from("property-media").remove(filesToRemove);
-                          console.log("Removed property media files:", filesToRemove);
-                        }
-                        const { data: verFiles } = await supabase.storage
-                          .from("property-verifications")
-                          .list(`${property.id}`, { limit: 100 });
-                        if (verFiles && verFiles.length > 0) {
-                          const verFilesToRemove = verFiles.map(
-                            (file) => `${property.id}/${file.name}`
-                          );
-                          await supabase.storage
-                            .from("property-verifications")
-                            .remove(verFilesToRemove);
-                          console.log("Removed property verification files:", verFilesToRemove);
-                        }
-                        setProperties((prev) =>
-                          prev.filter((p) => p.id !== property.id)
-                        );
-                        toast({
-                          title: "Success",
-                          description: "Property deleted successfully",
-                        });
-                      } catch (error) {
-                        console.error("Error deleting property:", error);
-                        toast({
-                          title: "Error",
-                          description: "Failed to delete property",
-                          variant: "destructive",
-                        });
-                      }
-                    }}
-                  >
-                    Delete
+
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "active" | "sold")} className="w-full">
+          <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-8">
+            <TabsTrigger value="active">
+              Active Listings ({properties.length})
+            </TabsTrigger>
+            <TabsTrigger value="sold">
+              Sold Properties ({soldProperties.length})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="active">
+            {properties.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="flex flex-col items-center justify-center space-y-4">
+                  <div className="p-6 rounded-full bg-primary/10 text-primary">
+                    <ImageIcon className="h-12 w-12" />
+                  </div>
+                  <h2 className="text-2xl font-semibold">No Active Properties</h2>
+                  <p className="text-muted-foreground max-w-sm">
+                    Start by adding your first property listing. Click the "Add New Property" button above to get started.
+                  </p>
+                  <Button onClick={() => setOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Your First Property
                   </Button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {properties.map((property) => (
+                  <div key={property.id} className="group relative">
+                    <PropertyCard
+                      id={property.id}
+                      title={property.title}
+                      price={property.price}
+                      location={`${property.city}, ${property.state}`}
+                      beds={property.bedrooms}
+                      baths={property.bathrooms}
+                      sqft={property.square_feet}
+                      unit={property.unit}
+                      roomTag={property.roomTag}
+                      imageUrl={
+                        property.images?.[0] ||
+                        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"
+                      }
+                    />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 rounded-lg">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setEditingProperty(property);
+                          setEditDialogOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <EditPropertyDialog
+                        isOpen={isEditDialogOpen && editingProperty?.id === property.id}
+                        onClose={() => {
+                          setEditDialogOpen(false);
+                          setEditingProperty(null);
+                        }}
+                        property={editingProperty}
+                        onUpdate={(updatedProperty) => {
+                          setProperties((prev) =>
+                            prev.map((p) =>
+                              p.id === updatedProperty.id ? updatedProperty : p
+                            )
+                          );
+                        }}
+                      />
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const { error } = await supabase
+                              .from("properties")
+                              .delete()
+                              .eq("id", property.id);
+                            if (error) throw error;
+                            const { data: files } = await supabase.storage
+                              .from("property-media")
+                              .list(`${property.id}`, { limit: 100 });
+                            if (files && files.length > 0) {
+                              const filesToRemove = files.map(
+                                (file) => `${property.id}/${file.name}`
+                              );
+                              await supabase.storage.from("property-media").remove(filesToRemove);
+                              console.log("Removed property media files:", filesToRemove);
+                            }
+                            const { data: verFiles } = await supabase.storage
+                              .from("property-verifications")
+                              .list(`${property.id}`, { limit: 100 });
+                            if (verFiles && verFiles.length > 0) {
+                              const verFilesToRemove = verFiles.map(
+                                (file) => `${property.id}/${file.name}`
+                              );
+                              await supabase.storage
+                                .from("property-verifications")
+                                .remove(verFilesToRemove);
+                              console.log("Removed property verification files:", verFilesToRemove);
+                            }
+                            setProperties((prev) =>
+                              prev.filter((p) => p.id !== property.id)
+                            );
+                            toast({
+                              title: "Success",
+                              description: "Property deleted successfully",
+                            });
+                          } catch (error) {
+                            console.error("Error deleting property:", error);
+                            toast({
+                              title: "Error",
+                              description: "Failed to delete property",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="sold">
+            {soldProperties.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="flex flex-col items-center justify-center space-y-4">
+                  <div className="p-6 rounded-full bg-primary/10 text-primary">
+                    <DollarSign className="h-12 w-12" />
+                  </div>
+                  <h2 className="text-2xl font-semibold">No Sold Properties</h2>
+                  <p className="text-muted-foreground max-w-sm">
+                    You haven't sold any properties yet. Keep your listings active and they'll show up here once sold!
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6">
+                {soldProperties.map((soldProp) => (
+                  <div
+                    key={soldProp.transaction.id}
+                    className="bg-white dark:bg-card rounded-lg border border-blue-100 dark:border-white/10 p-6 hover:shadow-lg transition-shadow"
+                  >
+                    <div className="grid md:grid-cols-[250px_1fr] gap-6">
+                      {/* Property Image */}
+                      <div className="relative aspect-video md:aspect-square rounded-lg overflow-hidden">
+                        <img
+                          src={
+                            soldProp.property.images?.[0] ||
+                            "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"
+                          }
+                          alt={soldProp.property.title}
+                          className="w-full h-full object-cover"
+                        />
+                        <Badge className="absolute top-2 right-2 bg-green-500">
+                          Sold
+                        </Badge>
+                      </div>
+
+                      {/* Property Details */}
+                      <div className="flex flex-col">
+                        <div className="flex-1">
+                          <h3 className="text-2xl font-bold mb-2">
+                            {soldProp.property.title}
+                          </h3>
+
+                          <div className="space-y-3 text-sm text-muted-foreground mb-4">
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4" />
+                              <span className="font-semibold text-foreground">
+                                Buyer: {soldProp.buyer.full_name || "Unknown"}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4" />
+                              <span>
+                                Sold on:{" "}
+                                {new Date(soldProp.transaction.created_at).toLocaleDateString(
+                                  "en-US",
+                                  {
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric",
+                                  }
+                                )}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <DollarSign className="h-4 w-4" />
+                              <span className="font-semibold text-green-600 dark:text-green-400 text-lg">
+                                ${soldProp.transaction.amount.toLocaleString()}
+                              </span>
+                            </div>
+
+                            {soldProp.property.sublease_from && soldProp.property.sublease_to && (
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4" />
+                                <span>
+                                  Lease Period:{" "}
+                                  {new Date(soldProp.property.sublease_from).toLocaleDateString()} -{" "}
+                                  {new Date(soldProp.property.sublease_to).toLocaleDateString()}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex gap-3 text-sm">
+                            <Badge variant="outline">
+                              {soldProp.property.bedrooms} Bed
+                            </Badge>
+                            <Badge variant="outline">
+                              {soldProp.property.bathrooms} Bath
+                            </Badge>
+                            <Badge variant="outline">
+                              {soldProp.property.square_feet} sqft
+                            </Badge>
+                            <Badge variant="outline" className="capitalize">
+                              {soldProp.transaction.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

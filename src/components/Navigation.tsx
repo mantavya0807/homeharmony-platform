@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { ThemeToggle } from "./ThemeToggle";
@@ -76,39 +76,31 @@ export function Navigation({ isAuthenticated, userRole }: NavigationProps) {
   };
 
   // Scroll handler
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
-    };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  // Fetch profile and unread messages count
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchProfile();
-      fetchUnreadCount();
+  // Define fetch functions first
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: participations } = await supabase
+        .from("chat_participants")
+        .select("chat_id")
+        .eq("user_id", user.id);
+      if (!participations?.length) {
+        setUnreadCount(0);
+        return;
+      }
+      const { count } = await supabase
+        .from("messages")
+        .select("id", { count: "exact" })
+        .in("chat_id", participations.map((p) => p.chat_id))
+        .eq("read", false)
+        .neq("sender_id", user.id);
+      console.log("Unread count updated:", count);
+      setUnreadCount(count || 0);
+    } catch (error) {
+      console.error("Error fetching unread count:", error);
     }
-  }, [isAuthenticated]);
-
-  // Real-time message updates
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    
-    const subscription = supabase
-      .channel("messages_changes")
-      .on("postgres_changes", { 
-        event: "*", 
-        schema: "public", 
-        table: "messages" 
-      }, fetchUnreadCount)
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [isAuthenticated]);
+  }, []);
 
   const fetchProfile = async () => {
     try {
@@ -127,26 +119,43 @@ export function Navigation({ isAuthenticated, userRole }: NavigationProps) {
     }
   };
 
-  const fetchUnreadCount = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: participations } = await supabase
-        .from("chat_participants")
-        .select("chat_id")
-        .eq("user_id", user.id);
-      if (!participations?.length) return;
-      const { count } = await supabase
-        .from("messages")
-        .select("id", { count: "exact" })
-        .in("chat_id", participations.map((p) => p.chat_id))
-        .eq("read", false)
-        .neq("sender_id", user.id);
-      setUnreadCount(count || 0);
-    } catch (error) {
-      console.error("Error fetching unread count:", error);
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 20);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Fetch profile and unread messages count
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchProfile();
+      fetchUnreadCount();
     }
-  };
+  }, [isAuthenticated, fetchUnreadCount]);
+
+  // Real-time message updates
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    const subscription = supabase
+      .channel("messages_changes")
+      .on("postgres_changes", { 
+        event: "*", 
+        schema: "public", 
+        table: "messages" 
+      }, (payload) => {
+        console.log("Message change detected in navbar:", payload);
+        // Refetch unread count whenever any message changes
+        fetchUnreadCount();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [isAuthenticated, fetchUnreadCount]);
 
   const handleSignOut = async () => {
     try {
@@ -211,6 +220,9 @@ export function Navigation({ isAuthenticated, userRole }: NavigationProps) {
         </Button>
         <Button variant="ghost" className={baseButtonClass} asChild>
           <Link to="/saved">Saved</Link>
+        </Button>
+        <Button variant="ghost" className={baseButtonClass} asChild>
+          <Link to="/purchases">My Purchases</Link>
         </Button>
         <Button variant="ghost" className={`${baseButtonClass} relative`} asChild>
           <Link to="/chat" className="flex items-center gap-2">

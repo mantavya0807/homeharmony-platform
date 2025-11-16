@@ -95,14 +95,20 @@ export default function Hero() {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="mx-auto max-w-3xl text-center"
         >
-          <motion.h1
-            className="bg-gradient-to-r from-blue-950 via-blue-800 to-blue-600 dark:from-primary dark:to-blue-600 bg-clip-text text-6xl font-bold leading-tight text-transparent drop-shadow-sm"
-            initial={{ scale: 0.95 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
+          <h1 
+            className="text-6xl font-bold leading-tight drop-shadow-sm text-blue-900 dark:text-white"
+            style={theme ? {
+              backgroundImage: theme === 'dark' 
+                ? 'linear-gradient(to right, hsl(var(--primary)), rgb(37 99 235))' 
+                : 'linear-gradient(to right, rgb(23 37 84), rgb(30 64 175), rgb(37 99 235))',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              color: 'transparent'
+            } : undefined}
           >
             Your Perfect Sublease Awaits
-          </motion.h1>
+          </h1>
 
           <motion.p
             className="mt-6 text-xl text-blue-950/80 dark:text-muted-foreground font-medium"

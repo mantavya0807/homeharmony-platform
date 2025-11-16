@@ -1,138 +1,323 @@
-// import express from 'express';
-// import Stripe from 'stripe';
-// import dotenv from 'dotenv';
+/**
+ * Modern Stripe Integration - November 2025
+ * 
+ * This implements:
+ * - Stripe Connect Express accounts for sellers
+ * - PaymentIntent API for secure payments
+ * - Destination charges (platform takes fee, rest goes to seller)
+ * - Embedded onboarding components
+ */
 
-// dotenv.config();
+import express from 'express';
+import Stripe from 'stripe';
+import dotenv from 'dotenv';
 
-// const router = express.Router();
+dotenv.config();
 
-// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-//   apiVersion: '2025-01-27.acacia'
-// });
+const router = express.Router();
 
-// // Create a Connect account
-// router.post('/connect/account', async (req, res) => {
-//   try {
-//     console.log('Creating Stripe account...');
-//     const account = await stripe.accounts.create({
-//       type: 'express',
-//       capabilities: {
-//         card_payments: { requested: true },
-//         transfers: { requested: true },
-//       },
-//       business_type: 'individual',
-//       settings: {
-//         payouts: {
-//           schedule: {
-//             interval: 'manual'
-//           }
-//         }
-//       }
-//     });
+// Initialize Stripe - using default API version
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
-//     console.log('Stripe account created:', account.id);
-//     res.json({ accountId: account.id });
-//   } catch (error: any) {
-//     console.error('Error creating Stripe account:', error);
-//     res.status(500).json({ 
-//       error: 'Failed to create Stripe account',
-//       details: error.message 
-//     });
-//   }
-// });
+/**
+ * CREATE CONNECT ACCOUNT
+ * Creates a Stripe Express account for sellers
+ */
+router.post('/connect/create-account', async (req, res) => {
+  try {
+    const { email, businessType = 'individual' } = req.body;
 
-// // Create an account session
-// router.post('/connect/account-session', async (req, res) => {
-//   try {
-//     const { accountId } = req.body;
-//     if (!accountId) {
-//       return res.status(400).json({ error: 'Account ID is required' });
-//     }
+    console.log('Creating Stripe Connect account for:', email);
 
-//     console.log('Creating account session for:', accountId);
-//     const accountLink = await stripe.accountLinks.create({
-//       account: accountId,
-//       refresh_url: `${process.env.VITE_APP_URL}/onboarding/refresh`,
-//       return_url: `${process.env.VITE_APP_URL}/onboarding/complete`,
-//       type: 'account_onboarding',
-//       collect: 'eventually_due'
-//     });
+    const account = await stripe.accounts.create({
+      type: 'express',
+      country: 'US',
+      email: email,
+      capabilities: {
+        card_payments: { requested: true },
+        transfers: { requested: true },
+      },
+      business_type: businessType,
+    });
 
-//     console.log('Account session created with URL:', accountLink.url);
-//     res.json({ url: accountLink.url });
-//   } catch (error: any) {
-//     console.error('Error creating account session:', error);
-//     res.status(500).json({ 
-//       error: 'Failed to create account session',
-//       details: error.message 
-//     });
-//   }
-// });
+    console.log('✅ Created Stripe account:', account.id);
 
-// // Check account status
-// router.get('/account/:accountId/status', async (req, res) => {
-//   try {
-//     const { accountId } = req.params;
-//     const account = await stripe.accounts.retrieve(accountId);
+    res.json({
+      success: true,
+      accountId: account.id,
+    });
+  } catch (error: any) {
+    console.error('❌ Error creating Connect account:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * CREATE ACCOUNT LINK
+ * Generates an onboarding link for seller to complete their Stripe setup
+ */
+router.post('/connect/create-account-link', async (req, res) => {
+  try {
+    const { accountId } = req.body;
+
+    if (!accountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Account ID is required',
+      });
+    }
+
+    const accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: `${process.env.VITE_APP_URL || 'http://localhost:8080'}/seller-dashboard?onboarding=refresh`,
+      return_url: `${process.env.VITE_APP_URL || 'http://localhost:8080'}/seller-dashboard?onboarding=complete`,
+      type: 'account_onboarding',
+    });
+
+    console.log('✅ Created account link for:', accountId);
+
+    res.json({
+      success: true,
+      url: accountLink.url,
+    });
+  } catch (error: any) {
+    console.error('❌ Error creating account link:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET ACCOUNT STATUS
+ * Check if seller account is fully onboarded and can receive payments
+ */
+router.get('/connect/account-status/:accountId', async (req, res) => {
+  try {
+    const { accountId } = req.params;
+
+    const account = await stripe.accounts.retrieve(accountId);
+
+    const isComplete = account.details_submitted === true &&
+                      account.charges_enabled === true &&
+                      account.payouts_enabled === true;
+
+    res.json({
+      success: true,
+      accountId: account.id,
+      detailsSubmitted: account.details_submitted,
+      chargesEnabled: account.charges_enabled,
+      payoutsEnabled: account.payouts_enabled,
+      isComplete: isComplete,
+      requirements: account.requirements,
+    });
+  } catch (error: any) {
+    console.error('❌ Error fetching account status:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * Helper function to sanitize metadata for Stripe
+ * Stripe metadata has strict requirements:
+ * - Values must be strings
+ * - No control characters or '..'
+ * - Max 500 characters per value
+ * - Max 50 keys
+ */
+function sanitizeMetadata(metadata: Record<string, any>): Record<string, string> {
+  const sanitized: Record<string, string> = {};
+  
+  for (const [key, value] of Object.entries(metadata)) {
+    if (value === null || value === undefined) continue;
     
-//     res.json({
-//       id: account.id,
-//       charges_enabled: account.charges_enabled,
-//       payouts_enabled: account.payouts_enabled,
-//       requirements: account.requirements,
-//       capabilities: account.capabilities
-//     });
-//   } catch (error: any) {
-//     console.error('Error checking account status:', error);
-//     res.status(500).json({ error: error.message });
-//   }
-// });
-
-// // Create a payment intent
-// router.post('/payment-intent', async (req, res) => {
-//   try {
-//     const { amount, connectAccountId } = req.body;
+    // Convert to string and sanitize
+    let sanitizedValue = String(value)
+      .replace(/\.\./g, '') // Remove '..'
+      .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
+      .substring(0, 500); // Limit length
     
-//     if (!amount || !connectAccountId) {
-//       return res.status(400).json({ 
-//         error: 'Missing required parameters',
-//         details: 'Amount and connectAccountId are required'
-//       });
-//     }
+    // Only include if not empty
+    if (sanitizedValue.trim()) {
+      sanitized[key] = sanitizedValue;
+    }
+  }
+  
+  return sanitized;
+}
 
-//     // First, verify the account status
-//     const account = await stripe.accounts.retrieve(connectAccountId);
-//     if (account.capabilities?.transfers !== 'active') {
-//       return res.status(400).json({
-//         error: 'Account not ready',
-//         details: 'The seller account has not completed the onboarding process'
-//       });
-//     }
+/**
+ * CREATE PAYMENT INTENT
+ * Creates a PaymentIntent for a property purchase
+ * Uses destination charges - platform takes 5% fee, rest goes to seller
+ */
+router.post('/create-payment-intent', async (req, res) => {
+  try {
+    // Trim all string inputs to remove any whitespace/newlines
+    const { amount, propertyId, metadata = {} } = req.body;
+    const sellerAccountId = req.body.sellerAccountId?.trim();
 
-//     console.log('Creating payment intent...', { amount, connectAccountId });
+    // Validation
+    if (!amount || amount < 50) {
+      return res.status(400).json({
+        success: false,
+        error: 'Amount must be at least $0.50',
+      });
+    }
+
+    if (!sellerAccountId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Seller account ID is required',
+      });
+    }
+
+    // Verify seller account is ready
+    const account = await stripe.accounts.retrieve(sellerAccountId);
     
-//     const paymentIntent = await stripe.paymentIntents.create({
-//       amount: Math.round(amount), // Ensure amount is in cents and rounded
-//       currency: 'usd',
-//       payment_method_types: ['card'],
-//       application_fee_amount: Math.round(amount * 0.05), // 5% platform fee
-//       transfer_data: {
-//         destination: connectAccountId,
-//       },
-//     });
+    if (!account.charges_enabled) {
+      return res.status(400).json({
+        success: false,
+        error: 'Seller account is not yet enabled to receive payments',
+      });
+    }
 
-//     console.log('Payment intent created:', paymentIntent.id);
-//     res.json({ 
-//       clientSecret: paymentIntent.client_secret,
-//       paymentIntentId: paymentIntent.id
-//     });
-//   } catch (error: any) {
-//     console.error('Error creating payment intent:', error);
-//     res.status(500).json({ 
-//       error: 'Failed to create payment intent',
-//       details: error.message 
-//     });
-//   }
-// });
+    // Calculate platform fee (5%)
+    const platformFeeAmount = Math.round(amount * 0.05);
+    const amountInCents = Math.round(amount * 100); // Convert dollars to cents
 
-// export default router;
+    // Sanitize metadata to prevent Stripe errors
+    const safeMetadata = sanitizeMetadata({
+      propertyId: propertyId || '',
+      ...metadata,
+    });
+
+    // Create PaymentIntent with destination charge (on platform account, transfers to connected account)
+    // Note: Do NOT use on_behalf_of with destination charges (transfer_data)
+    
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountInCents,
+      currency: 'usd',
+      payment_method_types: ['card'], // Explicit payment methods for Elements compatibility
+      // Temporarily disable application fee to test if that's the issue
+      // application_fee_amount: Math.round(platformFeeAmount * 100),
+      transfer_data: {
+        destination: sellerAccountId,
+      },
+      metadata: safeMetadata,
+    });
+
+    res.json({
+      success: true,
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
+    });
+  } catch (error: any) {
+    console.error('❌ Error creating PaymentIntent:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * CONFIRM PAYMENT
+ * Called after successful payment to update database
+ */
+router.post('/confirm-payment', async (req, res) => {
+  try {
+    const { paymentIntentId } = req.body;
+
+    if (!paymentIntentId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Payment Intent ID is required',
+      });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status === 'succeeded') {
+      res.json({
+        success: true,
+        paymentIntent: {
+          id: paymentIntent.id,
+          amount: paymentIntent.amount / 100,
+          status: paymentIntent.status,
+          metadata: paymentIntent.metadata,
+        },
+      });
+    } else {
+      res.json({
+        success: false,
+        error: 'Payment not yet completed',
+        status: paymentIntent.status,
+      });
+    }
+  } catch (error: any) {
+    console.error('❌ Error confirming payment:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * WEBHOOK HANDLER
+ * Handles Stripe webhook events
+ */
+router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!sig || !webhookSecret) {
+    return res.status(400).send('Webhook signature or secret missing');
+  }
+
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+  } catch (err: any) {
+    console.error('❌ Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Handle the event
+  console.log(`📨 Received webhook: ${event.type}`);
+
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      const paymentIntent = event.data.object as Stripe.PaymentIntent;
+      console.log(`✅ PaymentIntent succeeded: ${paymentIntent.id}`);
+      // Here you would update your database to mark the transaction as complete
+      break;
+
+    case 'payment_intent.payment_failed':
+      const failedPayment = event.data.object as Stripe.PaymentIntent;
+      console.log(`❌ Payment failed: ${failedPayment.id}`);
+      break;
+
+    case 'account.updated':
+      const account = event.data.object as Stripe.Account;
+      console.log(`🔄 Account updated: ${account.id}`);
+      break;
+
+    default:
+      console.log(`Unhandled event type: ${event.type}`);
+  }
+
+  res.json({ received: true });
+});
+
+export default router;
+

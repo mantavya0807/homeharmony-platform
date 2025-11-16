@@ -48,6 +48,17 @@ export interface Database {
           title: string;
           updated_at: string;
           zip_code: string;
+          status: string;
+          sublease_from: string | null;
+          sublease_to: string | null;
+          is_verified: boolean | null;
+          verification_document_url: string | null;
+          verified_at: string | null;
+          original_lease_rent: number | null;
+          rent_differential: number | null;
+          original_lease_term: number | null;
+          housing_complex_id: string | null;
+          google_maps_link: string | null;
         };
         Insert: {
           address: string;
@@ -67,6 +78,17 @@ export interface Database {
           title: string;
           updated_at?: string;
           zip_code: string;
+          status?: string;
+          sublease_from?: string | null;
+          sublease_to?: string | null;
+          is_verified?: boolean | null;
+          verification_document_url?: string | null;
+          verified_at?: string | null;
+          original_lease_rent?: number | null;
+          rent_differential?: number | null;
+          original_lease_term?: number | null;
+          housing_complex_id?: string | null;
+          google_maps_link?: string | null;
         };
         Update: {
           address?: string;
@@ -86,6 +108,17 @@ export interface Database {
           title?: string;
           updated_at?: string;
           zip_code?: string;
+          status?: string;
+          sublease_from?: string | null;
+          sublease_to?: string | null;
+          is_verified?: boolean | null;
+          verification_document_url?: string | null;
+          verified_at?: string | null;
+          original_lease_rent?: number | null;
+          rent_differential?: number | null;
+          original_lease_term?: number | null;
+          housing_complex_id?: string | null;
+          google_maps_link?: string | null;
         };
         Relationships: [
           {
@@ -214,6 +247,169 @@ export interface Database {
           {
             foreignKeyName: "property_clicks_user_id_fkey";
             columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      transactions: {
+        Row: {
+          id: string;
+          property_id: string;
+          seller_id: string;
+          buyer_id: string;
+          amount: number;
+          payment_intent_id: string;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          property_id: string;
+          seller_id: string;
+          buyer_id: string;
+          amount: number;
+          payment_intent_id: string;
+          status: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          property_id?: string;
+          seller_id?: string;
+          buyer_id?: string;
+          amount?: number;
+          payment_intent_id?: string;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "transactions_property_id_fkey";
+            columns: ["property_id"];
+            isOneToOne: false;
+            referencedRelation: "properties";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "transactions_seller_id_fkey";
+            columns: ["seller_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "transactions_buyer_id_fkey";
+            columns: ["buyer_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      chats: {
+        Row: {
+          id: string;
+          name: string | null;
+          is_group: boolean;
+          area: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name?: string | null;
+          is_group?: boolean;
+          area?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string | null;
+          is_group?: boolean;
+          area?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      chat_participants: {
+        Row: {
+          id: string;
+          chat_id: string;
+          user_id: string;
+          joined_at: string;
+        };
+        Insert: {
+          id?: string;
+          chat_id: string;
+          user_id: string;
+          joined_at?: string;
+        };
+        Update: {
+          id?: string;
+          chat_id?: string;
+          user_id?: string;
+          joined_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "chat_participants_chat_id_fkey";
+            columns: ["chat_id"];
+            isOneToOne: false;
+            referencedRelation: "chats";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "chat_participants_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      messages: {
+        Row: {
+          id: string;
+          chat_id: string;
+          sender_id: string;
+          content: string;
+          read: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          chat_id: string;
+          sender_id: string;
+          content: string;
+          read?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          chat_id?: string;
+          sender_id?: string;
+          content?: string;
+          read?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "messages_chat_id_fkey";
+            columns: ["chat_id"];
+            isOneToOne: false;
+            referencedRelation: "chats";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey";
+            columns: ["sender_id"];
+            isOneToOne: false;
             referencedRelation: "profiles";
             referencedColumns: ["id"];
           }

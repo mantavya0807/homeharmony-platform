@@ -19,19 +19,37 @@ export function ChatList({ selectedChat, onSelectChat }) {
     const fetchChats = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          console.log('ChatList: No user found');
+          setLoading(false);
+          return;
+        }
         setCurrentUserId(user.id);
         
-        const { data: participations } = await supabase
+        console.log('ChatList: Fetching participations for user:', user.id);
+        const { data: participations, error: participationsError } = await supabase
           .from('chat_participants')
           .select('chat_id')
           .eq('user_id', user.id);
 
-        if (!participations?.length) {
+        if (participationsError) {
+          console.error('ChatList: Error fetching participations:', participationsError);
           setLoading(false);
           return;
         }
 
-        const { data: chatsData } = await supabase
+        console.log('ChatList: Found participations:', participations);
+
+        if (!participations?.length) {
+          console.log('ChatList: No participations found');
+          setLoading(false);
+          return;
+        }
+
+        const chatIds = participations.map(p => p.chat_id);
+        console.log('ChatList: Fetching chats for IDs:', chatIds);
+
+        const { data: chatsData, error: chatsError } = await supabase
           .from('chats')
           .select(`
             *,
@@ -47,13 +65,20 @@ export function ChatList({ selectedChat, onSelectChat }) {
               sender:profiles(*)
             )
           `)
-          .in('id', participations.map(p => p.chat_id))
+          .in('id', chatIds)
           .order('updated_at', { ascending: false });
 
+        if (chatsError) {
+          console.error('ChatList: Error fetching chats:', chatsError);
+          setLoading(false);
+          return;
+        }
+
+        console.log('ChatList: Fetched chats:', chatsData);
         setChats(chatsData || []);
         setFilteredChats(chatsData || []);
       } catch (error) {
-        console.error('Error fetching chats:', error);
+        console.error('ChatList: Unexpected error:', error);
       } finally {
         setLoading(false);
       }
@@ -61,14 +86,29 @@ export function ChatList({ selectedChat, onSelectChat }) {
 
     fetchChats();
 
-    const subscription = supabase
-      .channel('chat_updates')
+    // Subscribe to changes in messages, chats, and chat_participants
+    const messagesSubscription = supabase
+      .channel('messages_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, 
         () => fetchChats())
       .subscribe();
 
+    const chatsSubscription = supabase
+      .channel('chats_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chats' }, 
+        () => fetchChats())
+      .subscribe();
+
+    const participantsSubscription = supabase
+      .channel('participants_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_participants' }, 
+        () => fetchChats())
+      .subscribe();
+
     return () => {
-      subscription.unsubscribe();
+      messagesSubscription.unsubscribe();
+      chatsSubscription.unsubscribe();
+      participantsSubscription.unsubscribe();
     };
   }, []);
 

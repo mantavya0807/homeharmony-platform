@@ -5,7 +5,7 @@ interface GoogleMapProps {
   className?: string;
 }
 
-const GOOGLE_MAPS_API_KEY = "AIzaSyBTa9vnh7E-1xmwPvdOoaNMzrzRGh7ud0I";
+const GOOGLE_MAPS_API_KEY = "AIzaSyBc9lsvGxCCrT0cvi2o1nm1LyISnz3y_Lo";
 
 const GoogleMap: React.FC<GoogleMapProps> = ({ address, className }) => {
   const encodedAddress = encodeURIComponent(address);
@@ -16,7 +16,7 @@ const GoogleMap: React.FC<GoogleMapProps> = ({ address, className }) => {
       src={mapURL}
       width="100%"
       height="500"
-      style={{ border: 0 }}
+      style={{ border: 0, pointerEvents: 'auto' }}
       allowFullScreen
       loading="lazy"
       className={className}

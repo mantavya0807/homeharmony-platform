@@ -9,6 +9,7 @@ import { MapPin, Building, Loader2, AlertCircle } from "lucide-react";
 import LocationDetailsCard from "@/components/LocationDetailsCard";
 import NearbyView from "@/components/NearbyView";
 import TransitView from "@/components/TransitView";
+import InteractiveMapWithPlaces from "@/components/InteractiveMapWithPlaces";
 import { useToast } from "@/components/ui/use-toast";
 
 export interface WalkScoreData {
@@ -33,6 +34,8 @@ export interface WalkScoreData {
   ws_link?: string;
   logo_url?: string;
   more_info_link?: string;
+  snapped_lat?: number;
+  snapped_lon?: number;
 }
 
 export default function PropertyDetailsLocation() {
@@ -43,6 +46,7 @@ export default function PropertyDetailsLocation() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("nearby");
+  const [allNearbyPlaces, setAllNearbyPlaces] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchPropertyDetails = async () => {
@@ -87,6 +91,51 @@ export default function PropertyDetailsLocation() {
       fetchPropertyDetails();
     }
   }, [id, toast]);
+
+  // Fetch nearby places for the map - use categorized endpoint to match the list below
+  useEffect(() => {
+    const fetchNearbyPlacesForMap = async () => {
+      if (!walkScoreData?.snapped_lat || !walkScoreData?.snapped_lon) return;
+
+      try {
+        const apiUrl = import.meta.env.DEV 
+          ? 'http://localhost:4000/api' 
+          : 'https://sub-space.me/api';
+
+        // Use categories endpoint to match the data shown below
+        const response = await fetch(
+          `${apiUrl}/google-places/categories?lat=${walkScoreData.snapped_lat}&lng=${walkScoreData.snapped_lon}&radius=1500`,
+          {
+            headers: { 'Accept': 'application/json' },
+            mode: 'cors'
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === "success" && data.categories) {
+            // Extract all places from all categories and tag them with category name
+            const allPlaces: any[] = [];
+            Object.entries(data.categories).forEach(([categoryKey, category]: [string, any]) => {
+              if (category.places && Array.isArray(category.places)) {
+                // Add category information to each place
+                const placesWithCategory = category.places.map((place: any) => ({
+                  ...place,
+                  categoryName: categoryKey // 'dining', 'shopping', 'coffee', 'education', 'parks'
+                }));
+                allPlaces.push(...placesWithCategory);
+              }
+            });
+            setAllNearbyPlaces(allPlaces);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching places for map:", error);
+      }
+    };
+
+    fetchNearbyPlacesForMap();
+  }, [walkScoreData]);
 
   const fetchWalkScore = async (propertyData: any) => {
     try {
@@ -243,6 +292,11 @@ export default function PropertyDetailsLocation() {
   const hasTransitScore = walkScoreData?.transit?.score !== undefined;
   const hasBikeScore = walkScoreData?.bike?.score !== undefined;
   
+  const handleTabChange = (value: string) => {
+    console.log("Tab changed to:", value);
+    setActiveTab(value);
+  };
+  
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between mb-6">
@@ -265,19 +319,26 @@ export default function PropertyDetailsLocation() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {/* Location Map and Scores Panel */}
         <div className="col-span-1 md:col-span-3 space-y-6">
-          {/* Map Placeholder - In a real app, you'd render an actual map here */}
-          <Card className="overflow-hidden h-96 bg-blue-50 dark:bg-blue-950/20">
-            <div className="h-full flex items-center justify-center bg-blue-50 dark:bg-blue-950/20">
-              <div className="text-center p-4">
-                <MapPin className="h-12 w-12 mx-auto text-blue-500/50 mb-4" />
-                <h3 className="font-semibold text-blue-800 dark:text-blue-400">
-                  Map View
-                </h3>
-                <p className="text-sm text-blue-600/70 dark:text-blue-300/70 max-w-md">
-                  {property.address}, {property.city}, {property.state} {property.zip_code}
-                </p>
+          {/* Interactive Map with Place Markers */}
+          <Card className="overflow-hidden h-96 bg-blue-50 dark:bg-blue-950/20 relative">
+            {walkScoreData?.snapped_lat && walkScoreData?.snapped_lon ? (
+              <InteractiveMapWithPlaces
+                center={{
+                  lat: walkScoreData.snapped_lat,
+                  lng: walkScoreData.snapped_lon
+                }}
+                places={allNearbyPlaces}
+                propertyAddress={`${property.address}, ${property.city}, ${property.state} ${property.zip_code || ''}`}
+                className="w-full h-full rounded-lg"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center p-4">
+                  <MapPin className="h-12 w-12 mx-auto text-blue-500/50 mb-4" />
+                  <p className="text-sm text-muted-foreground">Loading map...</p>
+                </div>
               </div>
-            </div>
+            )}
           </Card>
           
           {/* Walk Scores Section */}
@@ -340,75 +401,63 @@ export default function PropertyDetailsLocation() {
             )}
           </div>
           
-          {/* ONLY ONE TABS COMPONENT - REMOVE THE DUPLICATE */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid grid-cols-3 w-full rounded-md bg-blue-50 dark:bg-slate-800/60">
-              <TabsTrigger 
-                value="nearby" 
-                className="rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-blue-900/30"
-              >
-                Nearby Places
-              </TabsTrigger>
-              <TabsTrigger 
-                value="transit" 
-                className="rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-blue-900/30"
-              >
-                Transit
-              </TabsTrigger>
-              <TabsTrigger 
-                value="amenities" 
-                className="rounded-md data-[state=active]:bg-white dark:data-[state=active]:bg-blue-900/30"
-              >
-                Amenities
-              </TabsTrigger>
-            </TabsList>
-            
-            {/* Tab Content */}
-            <TabsContent value="nearby" className="pt-4">
+          {/* Tabs for Nearby Places, Transit, and Amenities */}
+          <div className="w-full mt-6">
+            <Tabs defaultValue="nearby" value={activeTab} onValueChange={handleTabChange}>
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="nearby">Nearby Places</TabsTrigger>
+                <TabsTrigger value="transit">Transit</TabsTrigger>
+                <TabsTrigger value="amenities">Amenities</TabsTrigger>
+              </TabsList>
+              
+            <TabsContent value="nearby" className="mt-6">
               <NearbyView 
                 walkScoreData={walkScoreData} 
                 propertyAddress={property.address}
                 propertyCity={property.city}
+                propertyLat={walkScoreData?.snapped_lat}
+                propertyLon={walkScoreData?.snapped_lon}
               />
             </TabsContent>
-            
-            <TabsContent value="transit" className="pt-4">
-              <TransitView 
-                walkScoreData={walkScoreData} 
-                propertyAddress={`${property.address}, ${property.city}, ${property.state}`}
-                lat={40.7934} // These coordinates should come from geocoding
-                lon={-77.86}
-              />
-            </TabsContent>
-            
-            <TabsContent value="amenities" className="pt-4">
-              <div className="mt-4 space-y-5">
-                <h3 className="text-lg font-medium">Property Amenities</h3>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {[
-                    "Laundry Facilities",
-                    "High-Speed Internet",
-                    "On-Site Parking",
-                    "Study Areas",
-                    "Fitness Center",
-                    "Bike Storage",
-                    "Pet Friendly",
-                    "Furnished Units",
-                    "24/7 Maintenance",
-                    "Security System"
-                  ].map((amenity, index) => (
-                    <Card key={`amenity-${index}`} className="bg-blue-50/80 dark:bg-blue-900/20 border-none">
-                      <CardContent className="p-3 flex items-center gap-3">
-                        <div className="h-2 w-2 rounded-full bg-primary" />
-                        <span className="text-sm">{amenity}</span>
-                      </CardContent>
-                    </Card>
-                  ))}
+              
+              <TabsContent value="transit" className="mt-6">
+                <TransitView 
+                  walkScoreData={walkScoreData} 
+                  propertyAddress={`${property.address}, ${property.city}, ${property.state}`}
+                  lat={walkScoreData?.snapped_lat || 40.7934}
+                  lon={walkScoreData?.snapped_lon || -77.86}
+                />
+              </TabsContent>
+              
+              <TabsContent value="amenities" className="mt-6">
+                <div className="space-y-5">
+                  <h3 className="text-lg font-medium">Property Amenities</h3>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {[
+                      "Laundry Facilities",
+                      "High-Speed Internet",
+                      "On-Site Parking",
+                      "Study Areas",
+                      "Fitness Center",
+                      "Bike Storage",
+                      "Pet Friendly",
+                      "Furnished Units",
+                      "24/7 Maintenance",
+                      "Security System"
+                    ].map((amenity, index) => (
+                      <Card key={`amenity-${index}`} className="bg-blue-50/80 dark:bg-blue-900/20 border-none">
+                        <CardContent className="p-3 flex items-center gap-3">
+                          <div className="h-2 w-2 rounded-full bg-primary" />
+                          <span className="text-sm">{amenity}</span>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </TabsContent>
-          </Tabs>
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
         
         {/* Right sidebar with property location details */}
