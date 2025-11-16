@@ -25,8 +25,9 @@ import AddHousingComplex from "@/components/AddHousingComplex";
 import { AddressInput } from "@/components/AddressInput";
 import RoomTypeInput from "@/components/RoomTypeInput";
 import { useTheme } from "next-themes";
+import { getApiUrl } from "@/lib/apiConfig";
 
-const VERIFICATION_API_URL = "http://localhost:4000/api/verify-document";
+const getVerificationApiUrl = () => `${getApiUrl()}/verify-document`;
 
 interface VerificationResult {
   is_verified: boolean;
@@ -239,7 +240,7 @@ export const EditPropertyDialog = ({
         formData.append("file", file);
         formData.append("propertyDetails", JSON.stringify(propertyDetails));
 
-        const response = await fetch(VERIFICATION_API_URL, {
+        const response = await fetch(getVerificationApiUrl(), {
           method: "POST",
           body: formData,
         });

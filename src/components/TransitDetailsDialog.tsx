@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Bus, Train, AlertCircle, ExternalLink, Loader2 } from "lucide-react";
 import { WalkScoreData } from "@/components/PropertyDetailsLocation";
+import { getApiUrl } from "@/lib/apiConfig";
 
 interface TransitRoute {
   type: string;
@@ -54,9 +55,7 @@ const TransitDetailsDialog: React.FC<TransitDetailsDialogProps> = ({
         setError(null);
 
         // Call the transit network API
-        const apiUrl = import.meta.env.DEV
-          ? 'http://localhost:4000/api'
-          : 'https://sub-space.me/api';
+        const apiUrl = getApiUrl();
 
         const response = await fetch(
           `${apiUrl}/walkscore/network?lat=${lat}&lon=${lon}`

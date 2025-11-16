@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, Bus, Train, Building, Loader2 } from "lucide-react";
 import { WalkScoreData } from "@/components/PropertyDetailsLocation";
+import { getApiUrl } from "@/lib/apiConfig";
 
 // Lazy load the TransitDetailsDialog
 const TransitDetailsDialog = React.lazy(() => import("./TransitDetailsDialog"));
@@ -46,9 +47,7 @@ export default function TransitView({
         return;
       }
 
-      const apiUrl = import.meta.env.DEV 
-        ? 'http://localhost:4000/api' 
-        : 'https://sub-space.me/api';
+      const apiUrl = getApiUrl();
 
       console.log(`Fetching transit routes for coordinates: ${lat}, ${lon}`);
 

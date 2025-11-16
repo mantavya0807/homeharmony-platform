@@ -9,6 +9,7 @@ import {
   School, 
   TreePalm
 } from "lucide-react";
+import { getApiUrl } from "@/lib/apiConfig";
 
 interface NearbyViewProps {
   walkScoreData?: {
@@ -67,9 +68,7 @@ export default function NearbyView({
         return;
       }
 
-      const apiUrl = import.meta.env.DEV 
-        ? 'http://localhost:4000/api' 
-        : 'https://sub-space.me/api';
+      const apiUrl = getApiUrl();
 
       console.log(`Fetching nearby places for coordinates: ${lat}, ${lng}`);
 

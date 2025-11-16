@@ -33,10 +33,34 @@ export interface PropertyDetails {
   sublease_to?: string;
 }
 
-// Initialize the Google Cloud Vision client
-const visionClient = new ImageAnnotatorClient({
-  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
-});
+// Lazy initialization of Google Cloud Vision client
+// This prevents errors during build time when env vars aren't available
+let visionClient: ImageAnnotatorClient | null = null;
+
+const getVisionClient = (): ImageAnnotatorClient => {
+  if (visionClient) {
+    return visionClient;
+  }
+
+  // Support both file path (local) and JSON string (Vercel)
+  let config;
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+    // For Vercel deployment - use JSON string
+    config = {
+      credentials: JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON)
+    };
+  } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    // For local development - use file path
+    config = {
+      keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS
+    };
+  } else {
+    throw new Error('Google Cloud Vision credentials not configured. Please set GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_APPLICATION_CREDENTIALS_JSON');
+  }
+
+  visionClient = new ImageAnnotatorClient(config);
+  return visionClient;
+};
 
 async function extractTextFromPDF(fileBuffer: Buffer): Promise<string> {
   console.log('[OCR-Utility] Extracting text from PDF...');
@@ -59,7 +83,8 @@ async function extractTextFromPDF(fileBuffer: Buffer): Promise<string> {
 async function extractTextFromImage(fileBuffer: Buffer): Promise<string> {
   console.log('[OCR-Utility] Using Google Cloud Vision for OCR on image...');
   try {
-    const [result] = await visionClient.textDetection({ image: { content: fileBuffer } });
+    const client = getVisionClient();
+    const [result] = await client.textDetection({ image: { content: fileBuffer } });
     const detections = result.textAnnotations;
     if (!detections || detections.length === 0) {
       throw new Error('No text detected in image');

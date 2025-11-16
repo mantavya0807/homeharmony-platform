@@ -1,13 +1,7 @@
 // src/utils/trackPropertyClick.ts
 
 import { supabase } from '@/integrations/supabase/client';
-
-const getApiUrl = () => {
-  if (import.meta.env.DEV) {
-    return 'http://localhost:4000/api'; // changed from 8080 to 4000
-  }
-  return 'https://sub-space.me/api';
-};
+import { getApiUrl } from '@/lib/apiConfig';
 
 export const trackPropertyClick = async (propertyId: string) => {
   try {

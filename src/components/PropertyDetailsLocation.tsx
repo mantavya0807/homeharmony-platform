@@ -11,6 +11,7 @@ import NearbyView from "@/components/NearbyView";
 import TransitView from "@/components/TransitView";
 import InteractiveMapWithPlaces from "@/components/InteractiveMapWithPlaces";
 import { useToast } from "@/components/ui/use-toast";
+import { getApiUrl } from "@/lib/apiConfig";
 
 export interface WalkScoreData {
   walkscore?: number;
@@ -98,9 +99,7 @@ export default function PropertyDetailsLocation() {
       if (!walkScoreData?.snapped_lat || !walkScoreData?.snapped_lon) return;
 
       try {
-        const apiUrl = import.meta.env.DEV 
-          ? 'http://localhost:4000/api' 
-          : 'https://sub-space.me/api';
+        const apiUrl = getApiUrl();
 
         // Use categories endpoint to match the data shown below
         const response = await fetch(
@@ -142,9 +141,7 @@ export default function PropertyDetailsLocation() {
       // Build address string from property data
       const fullAddress = `${propertyData.address}, ${propertyData.city}, ${propertyData.state} ${propertyData.zip_code || ''}`.trim();
       
-      const apiUrl = import.meta.env.DEV 
-        ? 'http://localhost:4000/api' 
-        : 'https://sub-space.me/api';
+      const apiUrl = getApiUrl();
       
       console.log(`Fetching Walk Score data for address: ${fullAddress}`);
       

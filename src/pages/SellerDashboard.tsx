@@ -25,6 +25,7 @@ import { AddressInput } from "@/components/AddressInput";
 import StripeOnboarding from "@/components/StripeOnboarding";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
+import { getApiUrl } from "@/lib/apiConfig";
 import {
   Tooltip,
   TooltipContent,
@@ -466,7 +467,7 @@ export default function SellerDashboard() {
         })
       );
 
-      const response = await fetch("http://localhost:4000/api/verify-document", {
+      const response = await fetch(`${getApiUrl()}/verify-document`, {
         method: "POST",
         body: formData,
       });

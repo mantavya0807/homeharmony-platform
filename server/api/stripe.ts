@@ -70,10 +70,13 @@ router.post('/connect/create-account-link', async (req, res) => {
       });
     }
 
+    // Get app URL - VITE_APP_URL is available in Vercel, fallback for local dev
+    const appUrl = process.env.VITE_APP_URL || process.env.APP_URL || 'http://localhost:8080';
+    
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${process.env.VITE_APP_URL || 'http://localhost:8080'}/seller-dashboard?onboarding=refresh`,
-      return_url: `${process.env.VITE_APP_URL || 'http://localhost:8080'}/seller-dashboard?onboarding=complete`,
+      refresh_url: `${appUrl}/seller-dashboard?onboarding=refresh`,
+      return_url: `${appUrl}/seller-dashboard?onboarding=complete`,
       type: 'account_onboarding',
     });
 

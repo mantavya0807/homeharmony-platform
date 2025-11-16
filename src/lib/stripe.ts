@@ -4,9 +4,10 @@
  */
 
 import { loadStripe, Stripe } from '@stripe/stripe-js';
+import { getApiUrl } from './apiConfig';
 
-// Get API URL from environment or default to localhost
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+// Get API URL using centralized config
+const API_URL = getApiUrl();
 
 // Initialize Stripe immediately
 const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
@@ -27,7 +28,7 @@ export const getStripe = () => stripePromise;
  */
 export const createConnectAccount = async (email: string) => {
   try {
-    const response = await fetch(`${API_URL}/api/stripe/connect/create-account`, {
+    const response = await fetch(`${API_URL}/stripe/connect/create-account`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -53,7 +54,7 @@ export const createConnectAccount = async (email: string) => {
  */
 export const createAccountLink = async (accountId: string) => {
   try {
-    const response = await fetch(`${API_URL}/api/stripe/connect/create-account-link`, {
+    const response = await fetch(`${API_URL}/stripe/connect/create-account-link`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -79,7 +80,7 @@ export const createAccountLink = async (accountId: string) => {
  */
 export const getAccountStatus = async (accountId: string) => {
   try {
-    const response = await fetch(`${API_URL}/api/stripe/connect/account-status/${accountId}`);
+    const response = await fetch(`${API_URL}/stripe/connect/account-status/${accountId}`);
     
     const data = await response.json();
 
@@ -106,7 +107,7 @@ export const createPaymentIntent = async (
   try {
     console.log(`Creating PaymentIntent for $${amount}`);
 
-    const response = await fetch(`${API_URL}/api/stripe/create-payment-intent`, {
+    const response = await fetch(`${API_URL}/stripe/create-payment-intent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -137,7 +138,7 @@ export const createPaymentIntent = async (
  */
 export const confirmPayment = async (paymentIntentId: string) => {
   try {
-    const response = await fetch(`${API_URL}/api/stripe/confirm-payment`, {
+    const response = await fetch(`${API_URL}/stripe/confirm-payment`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
