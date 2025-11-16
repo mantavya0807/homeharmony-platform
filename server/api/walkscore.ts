@@ -65,6 +65,8 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
 router.get("/score", async (req, res) => {
   const { address, lat, lon, city, state } = req.query;
   console.log("Received Walk Score request with:", { address, lat, lon, city, state });
+  console.log("WALK_SCORE_API_KEY present:", !!WALK_SCORE_API_KEY);
+  console.log("GOOGLE_MAPS_API_KEY present:", !!GOOGLE_MAPS_API_KEY);
 
   // Validate minimum required parameters
   if (!address && (!lat || !lon)) {
@@ -141,8 +143,18 @@ router.get("/score", async (req, res) => {
     return res.json(response.data);
   } catch (error: unknown) {  // Explicitly type error as unknown
     console.error("Error fetching Walk Score data:", error);
+    console.error("Error stack:", error instanceof Error ? error.stack : 'No stack trace');
     
-    // Return mock data when the API fails
+    // Return error details in development, mock data in production
+    if (process.env.NODE_ENV === 'development') {
+      return res.status(500).json({
+        error: "Walk Score API error",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+    }
+    
+    // Return mock data when the API fails in production
     console.log("Returning mock data due to API error");
     return res.json(getMockWalkScoreData(city as string, state as string));
   }
