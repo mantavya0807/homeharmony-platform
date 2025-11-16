@@ -64,6 +64,7 @@ interface PropertyForm {
   sublease_from?: string;
   sublease_to?: string;
   verification_document?: File | null;
+  utility_bill_document?: File | null;
   original_lease_rent?: string;
   original_lease_term?: string;
 }
@@ -187,6 +188,7 @@ export default function SellerDashboard() {
     sublease_from: "",
     sublease_to: "",
     verification_document: null,
+    utility_bill_document: null,
     original_lease_rent: "",
     original_lease_term: "",
   });
@@ -428,6 +430,160 @@ export default function SellerDashboard() {
     }
   }
 
+  const handleDualVerificationUpload = async (
+    propertyId: string,
+    leaseFile: File,
+    utilityBillFile: File,
+    propertyDetails: {
+      address: string;
+      unit: string;
+      city: string;
+      state: string;
+      zip_code: string;
+      price: string;
+      original_lease_rent?: string;
+    }
+  ) => {
+    try {
+      console.log("[Frontend] Starting dual verification upload for property:", propertyId);
+      
+      // Validate both files
+      const maxSize = 5 * 1024 * 1024;
+      if (leaseFile.size > maxSize || utilityBillFile.size > maxSize) {
+        throw new Error("Each file size must be less than 5MB");
+      }
+      
+      const allowedTypes = ["image/jpeg", "image/png", "image/jpg", "application/pdf"];
+      if (!allowedTypes.includes(leaseFile.type) || !allowedTypes.includes(utilityBillFile.type)) {
+        throw new Error("File type not supported. Please upload JPEG, PNG, or PDF files.");
+      }
+
+      const formData = new FormData();
+      formData.append("lease", leaseFile);
+      formData.append("utilityBill", utilityBillFile);
+      formData.append("propertyDetails", JSON.stringify({
+        ...propertyDetails,
+        unit: propertyDetails.unit,
+      }));
+
+      const response = await fetch(`${getApiUrl()}/verify-document/dual`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Document verification failed");
+      }
+
+      const verificationResult = await response.json();
+      
+      // Upload lease document to storage
+      const timestamp = Date.now();
+      const sanitizedLeaseName = leaseFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const leaseFilePath = `${propertyId}/${timestamp}-lease-${sanitizedLeaseName}`;
+      
+      const { error: leaseUploadError } = await supabase.storage
+        .from("property-verifications")
+        .upload(leaseFilePath, leaseFile, {
+          cacheControl: "3600",
+          contentType: leaseFile.type,
+          upsert: true,
+        });
+      
+      if (leaseUploadError) {
+        throw new Error(`Failed to upload lease: ${leaseUploadError.message}`);
+      }
+
+      const { data: leasePublicUrlData } = supabase.storage
+        .from("property-verifications")
+        .getPublicUrl(leaseFilePath);
+
+      // Upload utility bill to storage
+      const sanitizedUtilityName = utilityBillFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const utilityFilePath = `${propertyId}/${timestamp}-utility-${sanitizedUtilityName}`;
+      
+      const { error: utilityUploadError } = await supabase.storage
+        .from("property-verifications")
+        .upload(utilityFilePath, utilityBillFile, {
+          cacheControl: "3600",
+          contentType: utilityBillFile.type,
+          upsert: true,
+        });
+      
+      if (utilityUploadError) {
+        throw new Error(`Failed to upload utility bill: ${utilityUploadError.message}`);
+      }
+
+      const { data: utilityPublicUrlData } = supabase.storage
+        .from("property-verifications")
+        .getPublicUrl(utilityFilePath);
+
+      // Update property with verification results
+      const { error: updateError } = await supabase
+        .from("properties")
+        .update({
+          is_verified: verificationResult.is_verified,
+          verification_document_url: leasePublicUrlData.publicUrl,
+          utility_bill_url: utilityPublicUrlData.publicUrl,
+          lease_verified: verificationResult.leaseVerified,
+          utility_bill_verified: verificationResult.utilityBillVerified,
+          documents_match: verificationResult.documentsMatch,
+          verification_score: verificationResult.score,
+          verification_details: verificationResult.matchDetails,
+          verified_at: verificationResult.is_verified ? new Date().toISOString() : null,
+          sublease_from: verificationResult.leaseInfo?.startDate
+            ? new Date(verificationResult.leaseInfo.startDate).toISOString()
+            : null,
+          sublease_to: verificationResult.leaseInfo?.endDate
+            ? new Date(verificationResult.leaseInfo.endDate).toISOString()
+            : null,
+          original_lease_rent: verificationResult.leaseInfo?.originalRent || null,
+          rent_differential: (() => {
+            const originalRent = verificationResult.leaseInfo?.originalRent;
+            const currentPrice = parseFloat(propertyDetails.price);
+            if (!originalRent || !currentPrice || currentPrice === 0) return null;
+            const diff = ((originalRent - currentPrice) / currentPrice) * 100;
+            return Math.max(Math.min(diff, 999.99), -999.99);
+          })(),
+          original_lease_term: verificationResult.leaseInfo?.leaseTerm || null,
+        })
+        .eq("id", propertyId);
+
+      if (updateError) {
+        throw new Error(`Failed to update property: ${updateError.message}`);
+      }
+
+      const matchStatus = verificationResult.matchDetails 
+        ? `Name: ${verificationResult.matchDetails.nameMatch ? '✓' : '✗'}, Address: ${verificationResult.matchDetails.addressMatch ? '✓' : '✗'}, Date: ${verificationResult.matchDetails.dateMatch ? '✓' : '✗'}`
+        : '';
+
+      toast({
+        title: verificationResult.is_verified ? "Verification Successful" : "Verification Pending",
+        description: verificationResult.is_verified
+          ? `Both documents verified! Score: ${verificationResult.score?.toFixed(0)}. ${matchStatus}`
+          : `Documents uploaded but verification incomplete. ${matchStatus}`,
+        variant: verificationResult.is_verified ? "default" : "destructive",
+      });
+
+      return {
+        success: true,
+        is_verified: verificationResult.is_verified,
+        leaseUrl: leasePublicUrlData.publicUrl,
+        utilityUrl: utilityPublicUrlData.publicUrl,
+        matches: verificationResult.matches,
+      };
+    } catch (error: any) {
+      console.error("[Frontend] Dual verification upload error:", error);
+      toast({
+        title: "Verification Upload Failed",
+        description: error.message || "Failed to upload or verify documents",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
   const handleVerificationUpload = async (
     propertyId: string,
     file: File,
@@ -646,8 +802,13 @@ export default function SellerDashboard() {
       } else {
         console.log("No media files to upload.");
       }
-      if (verification_document) {
-        console.log("Uploading verification document...");
+      // Handle verification documents
+      if (verification_document && utility_bill_document) {
+        console.log("Uploading dual verification documents...");
+        const propertyDetails = { address, unit, city, state, zip_code, price, original_lease_rent };
+        await handleDualVerificationUpload(data.id, verification_document, utility_bill_document, propertyDetails);
+      } else if (verification_document) {
+        console.log("Uploading single verification document (lease only)...");
         const propertyDetails = { address, unit, city, state, zip_code, price, original_lease_rent };
         await handleVerificationUpload(data.id, verification_document, propertyDetails);
       }
@@ -746,6 +907,7 @@ export default function SellerDashboard() {
       sublease_from: "",
       sublease_to: "",
       verification_document: null,
+      utility_bill_document: null,
       original_lease_rent: "",
       original_lease_term: "",
     });
@@ -1020,7 +1182,54 @@ export default function SellerDashboard() {
                           </div>
                         )}
                         <p className="text-xs text-muted-foreground">
-                          Upload an image or PDF for property verification.
+                          Upload your rental lease document (image or PDF).
+                        </p>
+                      </div>
+                      {/* Utility Bill Document */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="utility_bill_document">
+                            Utility Bill (Required for Verification)
+                          </Label>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Info className="h-4 w-4 text-muted-foreground cursor-pointer" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs p-2 text-sm text-white bg-gray-800 rounded shadow-lg z-50">
+                              Upload a recent utility bill (electricity, water, gas) from the last 30 days. It must match the name and address on your lease for verification.
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                        <input
+                          type="file"
+                          id="utility_bill_document"
+                          accept="image/*,application/pdf"
+                          onChange={(e) =>
+                            setNewProperty({
+                              ...newProperty,
+                              utility_bill_document: e.target.files?.[0] || null,
+                            })
+                          }
+                          className="rounded-lg border-gray-300 p-2 w-full focus:ring-2 focus:ring-blue-500"
+                        />
+                        {newProperty.utility_bill_document && (
+                          <div className="mt-2 flex items-center space-x-2">
+                            {newProperty.utility_bill_document.type === "application/pdf" ? (
+                              <ImageIcon className="h-6 w-6 text-blue-500" />
+                            ) : (
+                              <img
+                                src={URL.createObjectURL(newProperty.utility_bill_document)}
+                                alt="Utility Bill Preview"
+                                className="h-6 w-6 object-cover rounded-lg"
+                              />
+                            )}
+                            <span className="text-sm">
+                              {newProperty.utility_bill_document.name}
+                            </span>
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          Upload a recent utility bill (last 30 days) showing your name and property address.
                         </p>
                       </div>
                     </div>

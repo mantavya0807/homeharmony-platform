@@ -213,4 +213,132 @@ router.post('/refine', async (req, res) => {
   }
 });
 
+/**
+ * Dual document verification endpoint - compares lease and utility bill
+ */
+router.post('/refine-dual', async (req, res) => {
+  console.log('[Gemini-Dual] Received dual verification request');
+
+  // Check Authorization
+  const authHeader = req.get('Authorization') || '';
+  const expectedToken = `Bearer ${process.env.GEMINI_API_KEY || 'GEMINI_API_KEY_123'}`;
+  if (authHeader !== expectedToken) {
+    console.error('[Gemini-Dual] Unauthorized request.');
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { leaseText, utilityBillText, propertyDetails } = req.body;
+  if (!leaseText || !utilityBillText || !propertyDetails) {
+    console.error('[Gemini-Dual] Missing required fields.');
+    return res.status(400).json({ error: 'Missing required fields (leaseText, utilityBillText, propertyDetails)' });
+  }
+
+  try {
+    console.log('[Gemini-Dual] Analyzing both documents with Gemini AI...');
+    
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    
+    const prompt = `You are a document verification AI. You have two documents: a rental lease and a utility bill.
+
+LEASE DOCUMENT TEXT:
+${leaseText}
+
+UTILITY BILL TEXT:
+${utilityBillText}
+
+PROPERTY DETAILS PROVIDED:
+Address: ${propertyDetails.address} ${propertyDetails.unit || ''}
+City: ${propertyDetails.city}
+State: ${propertyDetails.state}
+ZIP: ${propertyDetails.zip_code}
+Listed Price: $${propertyDetails.price}
+
+TASK: Extract information from both documents and verify they match each other AND the property details.
+
+Extract from LEASE:
+- Tenant name
+- Property address (full address)
+- Lease start date
+- Lease end date
+- Monthly rent amount
+- Lease term (in months)
+
+Extract from UTILITY BILL:
+- Account holder name
+- Service address (full address)
+- Bill date
+- Bill month/period
+
+CROSS-VERIFICATION:
+1. Does the name on the lease match the name on the utility bill?
+2. Does the address on the lease match the address on the utility bill?
+3. Does the address match the provided property address?
+4. Is the utility bill recent (within last 60 days)?
+
+Return ONLY a JSON object in this exact format:
+{
+  "leaseVerified": boolean,
+  "utilityBillVerified": boolean,
+  "refinedScore": number (0-100),
+  "refinedMatches": {
+    "address": boolean,
+    "city": boolean,
+    "state": boolean,
+    "zip": boolean,
+    "price": boolean,
+    "leaseInfo": boolean
+  },
+  "matchDetails": {
+    "nameMatch": boolean,
+    "addressMatch": boolean,
+    "dateMatch": boolean (utility bill within 60 days),
+    "extractedLease": {
+      "name": string,
+      "address": string,
+      "startDate": string,
+      "endDate": string
+    },
+    "extractedUtilityBill": {
+      "name": string,
+      "address": string,
+      "billDate": string
+    }
+  },
+  "leaseInfo": {
+    "originalRent": number,
+    "leaseTerm": number,
+    "startDate": string,
+    "endDate": string,
+    "rentDifferential": number,
+    "propertyType": string,
+    "leaseType": string
+  }
+}`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    
+    console.log('[Gemini-Dual] Raw Gemini response:', text.substring(0, 500));
+    
+    // Extract JSON from response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Invalid response format from Gemini');
+    }
+    
+    const parsedResult = JSON.parse(jsonMatch[0]);
+    console.log('[Gemini-Dual] Parsed result:', parsedResult);
+    
+    return res.json(parsedResult);
+    
+  } catch (error: any) {
+    console.error('[Gemini-Dual] Error processing dual verification:', error);
+    return res.status(500).json({ 
+      error: 'Error processing dual document verification',
+      details: error.message 
+    });
+  }
+});
+
 export default router;

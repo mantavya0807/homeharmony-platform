@@ -183,3 +183,125 @@ export async function performOCR(
     };
   }
 }
+
+interface DualVerificationResponse extends VerificationResponse {
+  leaseVerified?: boolean;
+  utilityBillVerified?: boolean;
+  documentsMatch?: boolean;
+  matchDetails?: {
+    nameMatch: boolean;
+    addressMatch: boolean;
+    dateMatch: boolean;
+    extractedLease: {
+      name?: string;
+      address?: string;
+      startDate?: string;
+      endDate?: string;
+    };
+    extractedUtilityBill: {
+      name?: string;
+      address?: string;
+      billDate?: string;
+    };
+  };
+}
+
+/**
+ * Performs verification on both lease and utility bill documents and compares them
+ */
+export async function performDualDocumentVerification(
+  leaseBuffer: Buffer,
+  leaseMimetype: string,
+  utilityBuffer: Buffer,
+  utilityMimetype: string,
+  propertyDetails: PropertyDetails
+): Promise<DualVerificationResponse> {
+  try {
+    console.log('[Dual-OCR] Starting dual document verification...');
+    
+    // Extract text from both documents
+    let leaseText = '';
+    let utilityText = '';
+    
+    if (leaseMimetype === 'application/pdf') {
+      leaseText = await extractTextFromPDF(leaseBuffer);
+    } else {
+      leaseText = await extractTextFromImage(leaseBuffer);
+    }
+    
+    if (utilityMimetype === 'application/pdf') {
+      utilityText = await extractTextFromPDF(utilityBuffer);
+    } else {
+      utilityText = await extractTextFromImage(utilityBuffer);
+    }
+    
+    if (!leaseText.trim() || !utilityText.trim()) {
+      throw new Error('Could not extract text from one or both documents');
+    }
+    
+    console.log('[Dual-OCR] Lease text extracted (first 200 chars):', leaseText.substring(0, 200));
+    console.log('[Dual-OCR] Utility bill text extracted (first 200 chars):', utilityText.substring(0, 200));
+    
+    // Send both texts to Gemini for cross-verification
+    const geminiUrl = process.env.GEMINI_API_URL || 'http://localhost:4000/api/gemini/refine-dual';
+    const geminiApiKey = process.env.GEMINI_API_KEY || 'GEMINI_API_KEY_123';
+    
+    console.log('[Dual-OCR] Sending both documents to Gemini for cross-verification...');
+    
+    const response = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${geminiApiKey}`
+      },
+      body: JSON.stringify({
+        leaseText,
+        utilityBillText: utilityText,
+        propertyDetails
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.statusText}`);
+    }
+    
+    const geminiResult = await response.json();
+    console.log('[Dual-OCR] Gemini cross-verification result:', geminiResult);
+    
+    // Calculate overall match score
+    const matchDetails = geminiResult.matchDetails || {};
+    const matchScore = [
+      matchDetails.nameMatch,
+      matchDetails.addressMatch,
+      matchDetails.dateMatch
+    ].filter(Boolean).length;
+    
+    const documentsMatch = matchScore >= 2; // At least 2 out of 3 must match
+    const overallScore = geminiResult.refinedScore || 0;
+    
+    const finalResult: DualVerificationResponse = {
+      success: true,
+      text: `LEASE:\n${leaseText}\n\nUTILITY BILL:\n${utilityText}`,
+      is_verified: documentsMatch && overallScore >= 80,
+      leaseVerified: geminiResult.leaseVerified || false,
+      utilityBillVerified: geminiResult.utilityBillVerified || false,
+      documentsMatch,
+      matchDetails: geminiResult.matchDetails,
+      matches: geminiResult.refinedMatches,
+      score: overallScore,
+      refinedScore: overallScore,
+      refinedMatches: geminiResult.refinedMatches,
+      leaseInfo: geminiResult.leaseInfo,
+    };
+    
+    console.log('[Dual-OCR] Final dual verification result:', finalResult);
+    return finalResult;
+    
+  } catch (error: any) {
+    console.error('[Dual-OCR] Dual document verification error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to verify documents',
+    };
+  }
+}
