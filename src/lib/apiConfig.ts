@@ -9,14 +9,14 @@
  * we use relative URLs to avoid CORS issues
  */
 export const getApiUrl = (): string => {
-  // In development, use localhost
-  if (import.meta.env.DEV) {
+  // Only use localhost in local development
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
     return 'http://localhost:4000/api';
   }
   
-  // In production, use relative URL (same domain)
-  // This works because Vercel routes /api/* to the backend
-  // Custom domain or Vercel URL - doesn't matter, it's all relative
+  // CRITICAL: ALWAYS use relative URL in production to avoid CORS
+  // DO NOT use VITE_API_URL or any absolute URL
+  // Vercel routes /api/* to the backend automatically
   return '/api';
 };
 

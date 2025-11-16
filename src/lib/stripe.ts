@@ -7,7 +7,16 @@ import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { getApiUrl } from './apiConfig';
 
 // Get API URL using centralized config
+// This should always be '/api' in production to avoid CORS
 const API_URL = getApiUrl();
+
+// Verify API_URL is correct and log it
+if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+  console.log('🔧 Stripe API_URL:', API_URL);
+  if (!API_URL.startsWith('/')) {
+    console.error('❌ API_URL should be relative in production, got:', API_URL);
+  }
+}
 
 // Initialize Stripe immediately
 const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
