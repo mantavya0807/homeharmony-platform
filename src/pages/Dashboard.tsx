@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { PropertyList } from "@/components/PropertyList";
 import { Card } from "@/components/ui/card";
@@ -405,7 +405,7 @@ Return only a JSON object with these fields (use null if not specified):
     setAICriteria(null);
   };
 
-  const handleSaveToggle = async (propertyId: string) => {
+  const handleSaveToggle = useCallback(async (propertyId: string) => {
     try {
       // Get current user
       const {
@@ -471,11 +471,13 @@ Return only a JSON object with these fields (use null if not specified):
         variant: "destructive",
       });
     }
-  };
+  }, [filteredProperties, toast]);
 
-  const popularProperties = [...filteredProperties]
-    .sort((a, b) => (b.click_count || 0) - (a.click_count || 0))
-    .slice(0, 5);
+  const popularProperties = useMemo(() => {
+    return [...filteredProperties]
+      .sort((a, b) => (b.click_count || 0) - (a.click_count || 0))
+      .slice(0, 5);
+  }, [filteredProperties]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50/50 via-background to-background dark:from-background dark:to-background">

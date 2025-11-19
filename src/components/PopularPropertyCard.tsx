@@ -61,7 +61,7 @@ export interface PopularPropertyCardProps {
   onSaveToggle?: () => Promise<void>;
 }
 
-export function PopularPropertyCard({
+export const PopularPropertyCard = React.memo(function PopularPropertyCard({
   id,
   title,
   description,
@@ -116,19 +116,15 @@ export function PopularPropertyCard({
       className="group cursor-pointer w-full"
     >
       <Card className="rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-shadow w-full">
-        <CardHeader className="p-0 relative h-48">
-          {images && images.length > 1 ? (
-            <ImageGallery
-              photos={images}
-              className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-105"
-            />
-          ) : (
-            <img
-              src={images?.[0] || "/placeholder.jpg"}
-              alt={title}
-              className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-105"
-            />
-          )}
+        <CardHeader className="p-0 relative h-64">
+          <img
+            src={images?.[0] || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"}
+            alt={title}
+            className="object-cover object-center w-full h-full transition-transform duration-300 group-hover:scale-105"
+            onError={(e) => {
+              e.currentTarget.src = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c";
+            }}
+          />
 
           {/* Price Badge */}
           <Badge className="absolute bottom-2 left-2 bg-gradient-to-r from-blue-950 to-blue-700 text-white px-4 py-1 rounded-full shadow-md">
@@ -254,6 +250,6 @@ export function PopularPropertyCard({
       </Card>
     </motion.div>
   );
-}
+});
 
 export default PopularPropertyCard;

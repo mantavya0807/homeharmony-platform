@@ -13,8 +13,10 @@ interface SavedProperty {
     bedrooms: number;
     bathrooms: number;
     square_feet: number;
+    address: string;
     city: string;
     state: string;
+    zip_code: string;
     images: string[];
     status: string;
   };
@@ -80,8 +82,10 @@ export default function SavedProperties() {
             bedrooms,
             bathrooms,
             square_feet,
+            address,
             city,
             state,
+            zip_code,
             images,
             status
           )
@@ -173,14 +177,16 @@ export default function SavedProperties() {
               id={property.id}
               title={property.title}
               price={property.price}
-              location={`${property.city}, ${property.state}`}
-              beds={property.bedrooms}
-              baths={property.bathrooms}
-              sqft={property.square_feet}
-              imageUrl={
-                property.images?.[0] ||
-                "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"
-              }
+              address={property.address}
+              city={property.city}
+              state={property.state}
+              zip_code={property.zip_code}
+              bedrooms={property.bedrooms}
+              bathrooms={property.bathrooms}
+              square_feet={property.square_feet}
+              images={property.images || []}
+              status={property.status}
+              isSaved={true}
             />
           ))}
         </motion.div>

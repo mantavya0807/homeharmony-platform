@@ -10,9 +10,10 @@ import 'swiper/css/pagination';
 interface ImageGalleryProps {
   photos: string[];
   className?: string;
+  imageClassName?: string;
 }
 
-const ImageGallery: React.FC<ImageGalleryProps> = ({ photos, className }) => {
+const ImageGallery: React.FC<ImageGalleryProps> = ({ photos, className, imageClassName }) => {
   const validPhotos = photos.filter(url => url && typeof url === 'string');
 
   if (!validPhotos || validPhotos.length === 0) {
@@ -33,12 +34,15 @@ const ImageGallery: React.FC<ImageGalleryProps> = ({ photos, className }) => {
       className={`w-full ${className ? className : "h-[400px]"} rounded-t-lg relative overflow-hidden`}
     >
       {validPhotos.map((url, index) => (
-        <SwiperSlide key={`photo-${index}-${url}`} className="w-full h-full">
+        <SwiperSlide key={`photo-${index}-${url}`} className="w-full h-full overflow-hidden flex items-center justify-center bg-gray-100 dark:bg-gray-800">
           <img
             src={url}
             alt={`Property Photo ${index + 1}`}
-            className="w-full h-full object-cover"
+            className={`w-full h-full object-cover object-center ${imageClassName || ''}`}
             loading={index === 0 ? "eager" : "lazy"}
+            onError={(e) => {
+              e.currentTarget.src = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c";
+            }}
           />
         </SwiperSlide>
       ))}

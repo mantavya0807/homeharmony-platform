@@ -247,7 +247,6 @@ export default function SellerDashboard() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       setProperties(data || []);
-      console.log("Fetched Properties:", data);
     } catch (error) {
       console.error("Error fetching properties:", error);
       toast({
@@ -289,7 +288,6 @@ export default function SellerDashboard() {
       }));
 
       setSoldProperties(formattedSoldProperties);
-      console.log("Fetched Sold Properties:", formattedSoldProperties);
     } catch (error) {
       console.error("Error fetching sold properties:", error);
       toast({
@@ -308,7 +306,6 @@ export default function SellerDashboard() {
         .order("name", { ascending: true });
       if (error) throw error;
       setHousingComplexes(data || []);
-      console.log("Fetched Housing Complexes:", data);
     } catch (error) {
       console.error("Error fetching housing complexes:", error);
       toast({
@@ -330,7 +327,6 @@ export default function SellerDashboard() {
           ? ""
           : prev.housing_complex_id,
     }));
-    console.log("Property type changed to:", propertyType);
   };
 
   const handleAddComplex = (newComplex: HousingComplex) => {
@@ -339,7 +335,6 @@ export default function SellerDashboard() {
       ...prev,
       housing_complex_id: newComplex.id,
     }));
-    console.log("Added new housing complex:", newComplex);
   };
 
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -365,7 +360,6 @@ export default function SellerDashboard() {
             room: "",
           },
         ]);
-        console.log(`Added media file: ${file.name}`);
       };
       reader.readAsDataURL(file);
     });
@@ -382,7 +376,6 @@ export default function SellerDashboard() {
   const removeMedia = (index: number) => {
     const removed = mediaFiles[index];
     setMediaFiles((prev) => prev.filter((_, i) => i !== index));
-    console.log(`Removed media file: ${removed.file.name}`);
   };
 
   // Upload property media (and store public URLs in property_media table)
@@ -424,7 +417,6 @@ export default function SellerDashboard() {
         .from("property_media")
         .insert([{ property_id: propertyId, ...categorizedMedia }]);
       if (error) throw error;
-      console.log("Media URLs stored successfully in property_media table.");
     } catch (error) {
       console.error("Error uploading property media:", error);
     }
@@ -445,8 +437,6 @@ export default function SellerDashboard() {
     }
   ) => {
     try {
-      console.log("[Frontend] Starting dual verification upload for property:", propertyId);
-      
       // Validate both files
       const maxSize = 5 * 1024 * 1024;
       if (leaseFile.size > maxSize || utilityBillFile.size > maxSize) {
@@ -598,7 +588,6 @@ export default function SellerDashboard() {
     }
   ) => {
     try {
-      console.log("[Frontend] Starting verification upload for property:", propertyId);
       const maxSize = 5 * 1024 * 1024;
       if (file.size > maxSize) {
         throw new Error("File size must be less than 5MB");
@@ -754,7 +743,6 @@ export default function SellerDashboard() {
         utility_bill_document,
         original_lease_rent,
       } = newProperty;
-      console.log("Creating new property in Supabase...");
       const { data, error } = await supabase
         .from("properties")
         .insert([
@@ -789,27 +777,21 @@ export default function SellerDashboard() {
         .single();
       if (error) throw error;
       if (!data) throw new Error("Failed to create property");
-      console.log("New property created:", data);
       if (mediaFiles.length > 0) {
         await uploadPropertyMedia(data.id, mediaFiles);
         const mediaUrls = mediaFiles.map((file) => file.preview);
-        console.log("Updating property with media URLs...");
         const { error: updateError } = await supabase
           .from("properties")
           .update({ images: mediaUrls })
           .eq("id", data.id);
         if (updateError) throw updateError;
-        console.log("Property media updated.");
       } else {
-        console.log("No media files to upload.");
       }
       // Handle verification documents
       if (verification_document && utility_bill_document) {
-        console.log("Uploading dual verification documents...");
         const propertyDetails = { address, unit, city, state, zip_code, price, original_lease_rent };
         await handleDualVerificationUpload(data.id, verification_document, utility_bill_document, propertyDetails);
       } else if (verification_document) {
-        console.log("Uploading single verification document (lease only)...");
         const propertyDetails = { address, unit, city, state, zip_code, price, original_lease_rent };
         await handleVerificationUpload(data.id, verification_document, propertyDetails);
       }
@@ -913,7 +895,6 @@ export default function SellerDashboard() {
       original_lease_term: "",
     });
     setMediaFiles([]);
-    console.log("Form reset.");
   };
 
   if (loading || loadingHousingComplexes) {
@@ -1477,7 +1458,6 @@ export default function SellerDashboard() {
                                 (file) => `${property.id}/${file.name}`
                               );
                               await supabase.storage.from("property-media").remove(filesToRemove);
-                              console.log("Removed property media files:", filesToRemove);
                             }
                             const { data: verFiles } = await supabase.storage
                               .from("property-verifications")
@@ -1489,7 +1469,6 @@ export default function SellerDashboard() {
                               await supabase.storage
                                 .from("property-verifications")
                                 .remove(verFilesToRemove);
-                              console.log("Removed property verification files:", verFilesToRemove);
                             }
                             setProperties((prev) =>
                               prev.filter((p) => p.id !== property.id)

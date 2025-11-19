@@ -402,7 +402,7 @@ export default function Checkout() {
               <CardContent className="p-4">
                 <div className="aspect-video relative rounded-lg overflow-hidden mb-3">
                   <img
-                    src={property.photos?.[0]?.url || '/placeholder-property.jpg'}
+                    src={property.photos?.[0]?.url || 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c'}
                     alt={property.title}
                     className="w-full h-full object-cover"
                   />

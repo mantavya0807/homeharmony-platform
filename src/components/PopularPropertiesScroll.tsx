@@ -30,7 +30,7 @@ interface Property {
 
 interface PopularPropertiesProps {
   properties: Property[];
-  onSaveToggle: (propertyId: string) => void;
+  onSaveToggle: (propertyId: string) => Promise<void>;
 }
 
 const PopularPropertiesScroll = ({ properties, onSaveToggle }: PopularPropertiesProps) => {
@@ -81,7 +81,6 @@ const PopularPropertiesScroll = ({ properties, onSaveToggle }: PopularProperties
           <motion.div
             key={property.id}
             className="min-w-[22rem] flex-shrink-0 snap-center"
-            whileHover={{ scale: 1.02 }}
             transition={{ duration: 0.2 }}
           >
             <PopularPropertyCard
@@ -119,4 +118,4 @@ const PopularPropertiesScroll = ({ properties, onSaveToggle }: PopularProperties
   );
 };
 
-export default PopularPropertiesScroll;
+export default React.memo(PopularPropertiesScroll);

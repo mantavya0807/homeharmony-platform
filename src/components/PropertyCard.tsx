@@ -156,7 +156,7 @@ export function PropertyCard({
               />
             ) : (
               <img
-                src={images?.[0] || "/placeholder.jpg"}
+                src={images?.[0] || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c"}
                 alt={title}
                 className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-105"
               />
